@@ -1,6 +1,6 @@
 import { isAuthenticated, getCurrentUser } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { listImages, listFolders } from '@/lib/r2';
+import { listImages, listAllFolderPaths } from '@/lib/r2';
 import { loadMetadata } from '@/lib/metadata';
 import { GalleryClient } from '@/components/GalleryClient';
 
@@ -15,7 +15,7 @@ export default async function HomePage() {
 
   const [images, folders, metadataStore] = await Promise.all([
     listImages(undefined, user.id),
-    listFolders(user.id),
+    listAllFolderPaths(user.id),
     loadMetadata(),
   ]);
 
