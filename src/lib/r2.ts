@@ -12,8 +12,6 @@ export const r2 = new S3Client({
 
 export const BUCKET = process.env.R2_BUCKET_NAME!;
 
-const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.heic'];
-
 export interface GalleryImage {
   key: string;
   url: string;
@@ -40,10 +38,10 @@ export async function listImages(folder?: string, userId?: string): Promise<Gall
       .filter((obj) => {
         if (!obj.Key || obj.Key.endsWith('/')) return false;
         const filename = obj.Key.split('/').pop() || '';
+        // Skip system/marker files
         if (filename.startsWith('_')) return false;
         if (obj.Key.startsWith('_')) return false;
-        const ext = filename.toLowerCase().split('.').pop();
-        return ext !== undefined && IMAGE_EXTENSIONS.includes(`.${ext}`);
+        return true;
       })
       .map(async (obj) => {
         const url = await getSignedUrl(
@@ -52,13 +50,12 @@ export async function listImages(folder?: string, userId?: string): Promise<Gall
           { expiresIn: 3600 }
         );
         const parts = obj.Key!.split('/');
-        // userId/folder/file.jpg → folder = parts[1], filename = parts[2]
-        // userId/file.jpg        → folder = 'uncategorized', filename = parts[1]
-        // folder/file.jpg (legacy) → folder = parts[0], filename = parts[1]
         const filename = parts[parts.length - 1];
+        // userId/folder/sub/file.jpg → folder = 'folder/sub'
+        // userId/file.jpg           → folder = 'uncategorized'
         const folder = userId
-          ? (parts.length > 2 ? parts[1] : 'uncategorized')
-          : (parts.length > 1 ? parts[0] : 'uncategorized');
+          ? (parts.length > 2 ? parts.slice(1, -1).join('/') : 'uncategorized')
+          : (parts.length > 1 ? parts.slice(0, -1).join('/') : 'uncategorized');
 
         return {
           key: obj.Key!,
@@ -98,8 +95,41 @@ export async function uploadImage(
   return key;
 }
 
+// Keep old name as alias for backward compatibility
+export const listFiles = listImages;
+
 export async function deleteImage(key: string): Promise<void> {
   await r2.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+}
+
+export async function listAllFolderPaths(userId?: string): Promise<string[]> {
+  const prefix = userId ? `${userId}/` : '';
+  const command = new ListObjectsV2Command({ Bucket: BUCKET, Prefix: prefix });
+  const response = await r2.send(command);
+  const objects = response.Contents || [];
+
+  const folderPaths = new Set<string>();
+
+  for (const obj of objects) {
+    if (!obj.Key) continue;
+    const key = userId ? obj.Key.slice(userId.length + 1) : obj.Key;
+
+    if (key.endsWith('/')) {
+      // Marker object = empty folder
+      const folderPath = key.replace(/\/$/, '');
+      if (folderPath && !folderPath.startsWith('_')) folderPaths.add(folderPath);
+      continue;
+    }
+
+    const parts = key.split('/');
+    let current = '';
+    for (let i = 0; i < parts.length - 1; i++) {
+      current = current ? `${current}/${parts[i]}` : parts[i];
+      if (!current.startsWith('_')) folderPaths.add(current);
+    }
+  }
+
+  return Array.from(folderPaths).sort();
 }
 
 export async function listFolders(userId?: string): Promise<string[]> {

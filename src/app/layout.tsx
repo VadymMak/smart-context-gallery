@@ -5,8 +5,8 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'AK Gallery',
-  description: 'Private illustration gallery',
+  title: 'AK Storage',
+  description: 'Private file storage',
   robots: 'noindex, nofollow',
 };
 

@@ -13,6 +13,7 @@ export interface ImageMetadata {
   style: string;
   colors: string[];
   project?: string;
+  fileType?: string;
 }
 
 export interface MetadataStore {
@@ -81,6 +82,7 @@ export async function searchImages(query: string, userId?: string): Promise<Imag
       img.folder,
       img.project || '',
       img.filename,
+      img.fileType || '',
     ].join(' ').toLowerCase();
 
     return terms.every((term) => searchable.includes(term));

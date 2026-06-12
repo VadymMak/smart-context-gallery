@@ -155,7 +155,7 @@ async function readDirectory(
         const file = await new Promise<File>((resolve, reject) =>
           (entry as FileSystemFileEntry).file(resolve, reject)
         );
-        if (file.type.startsWith('image/')) results.push({ file, folder: folderName });
+        results.push({ file, folder: folderName });
       } else if (entry.isDirectory) {
         const sub = await readDirectory(entry as FileSystemDirectoryEntry, entry.name);
         results.push(...sub);
@@ -177,6 +177,95 @@ const CATEGORY_COLORS: Record<string, string> = {
   pattern: 'bg-indigo-100 text-indigo-700',
   other: 'bg-gray-100 text-gray-600',
 };
+
+// ─── File type helpers ────────────────────────────────────────────────────────
+
+const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','webp','svg','bmp','heic','avif']);
+const DOC_EXTS   = new Set(['pdf','doc','docx']);
+const SHEET_EXTS = new Set(['xls','xlsx','csv']);
+const SLIDE_EXTS = new Set(['ppt','pptx']);
+const TEXT_EXTS  = new Set(['txt','md','rtf']);
+const ARCH_EXTS  = new Set(['zip','rar','7z','tar','gz']);
+const VIDEO_EXTS = new Set(['mp4','mov','avi','mkv','webm']);
+const AUDIO_EXTS = new Set(['mp3','wav','ogg','flac','aac']);
+
+type FileKind = 'image' | 'pdf' | 'document' | 'spreadsheet' | 'presentation' | 'text' | 'archive' | 'video' | 'audio' | 'file';
+
+function getFileKind(filename: string): { kind: FileKind; color: string } {
+  const ext = filename.toLowerCase().split('.').pop() || '';
+  if (IMAGE_EXTS.has(ext)) return { kind: 'image',        color: 'bg-blue-100 text-blue-700' };
+  if (ext === 'pdf')        return { kind: 'pdf',          color: 'bg-red-100 text-red-700' };
+  if (DOC_EXTS.has(ext))   return { kind: 'document',     color: 'bg-blue-100 text-blue-700' };
+  if (SHEET_EXTS.has(ext)) return { kind: 'spreadsheet',  color: 'bg-green-100 text-green-700' };
+  if (SLIDE_EXTS.has(ext)) return { kind: 'presentation', color: 'bg-orange-100 text-orange-700' };
+  if (TEXT_EXTS.has(ext))  return { kind: 'text',         color: 'bg-gray-100 text-gray-700' };
+  if (ARCH_EXTS.has(ext))  return { kind: 'archive',      color: 'bg-yellow-100 text-yellow-700' };
+  if (VIDEO_EXTS.has(ext)) return { kind: 'video',        color: 'bg-purple-100 text-purple-700' };
+  if (AUDIO_EXTS.has(ext)) return { kind: 'audio',        color: 'bg-pink-100 text-pink-700' };
+  return { kind: 'file', color: 'bg-gray-100 text-gray-600' };
+}
+
+function isImageFile(filename: string): boolean {
+  return getFileKind(filename).kind === 'image';
+}
+
+function FileTypeIcon({ ext }: { ext: string }) {
+  const e = ext.toLowerCase();
+  const docPath = (
+    <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></>
+  );
+  if (e === 'pdf') return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      {docPath}
+      <line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="11" y2="17"/>
+      <text x="7.5" y="17.5" fontSize="5.5" fill="currentColor" stroke="none" fontWeight="bold">PDF</text>
+    </svg>
+  );
+  if (e === 'doc' || e === 'docx') return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      {docPath}<line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>
+    </svg>
+  );
+  if (e === 'xls' || e === 'xlsx' || e === 'csv') return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      {docPath}
+      <rect x="7" y="12" width="10" height="6" rx="0.5"/>
+      <line x1="12" y1="12" x2="12" y2="18"/><line x1="7" y1="15" x2="17" y2="15"/>
+    </svg>
+  );
+  if (e === 'ppt' || e === 'pptx') return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      {docPath}<rect x="8" y="12" width="8" height="5" rx="0.5"/>
+    </svg>
+  );
+  if (ARCH_EXTS.has(e)) return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M21 8v13H3V3h12l6 5z"/>
+      <rect x="9" y="10" width="6" height="8" rx="1"/>
+      <line x1="12" y1="10" x2="12" y2="13"/>
+    </svg>
+  );
+  if (VIDEO_EXTS.has(e)) return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/>
+      <line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/>
+      <line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/>
+      <line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/>
+    </svg>
+  );
+  if (AUDIO_EXTS.has(e)) return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+    </svg>
+  );
+  // default file
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+    </svg>
+  );
+}
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -502,62 +591,76 @@ function DeleteConfirmModal({ image, deleting, onConfirm, onCancel }: {
   );
 }
 
-// ─── Image Card ───────────────────────────────────────────────────────────────
+// ─── File Card ────────────────────────────────────────────────────────────────
 
-function ImageCard({ image, meta, selectMode, selected, onToggleSelect, onDeleteRequest, onShareRequest, onClick }: {
-  image: GalleryImage; meta?: ImageMetadata; selectMode: boolean; selected: boolean;
-  onToggleSelect: (key: string) => void; onDeleteRequest: (image: GalleryImage) => void;
-  onShareRequest: (image: GalleryImage) => void; onClick: () => void;
+function FileCard({ file, meta, selectMode, selected, onToggleSelect, onDeleteRequest, onShareRequest, onClick }: {
+  file: GalleryImage; meta?: ImageMetadata; selectMode: boolean; selected: boolean;
+  onToggleSelect: (key: string) => void; onDeleteRequest: (file: GalleryImage) => void;
+  onShareRequest: (file: GalleryImage) => void; onClick: () => void;
 }) {
+  const { kind, color } = getFileKind(file.filename);
+  const isImg = kind === 'image';
+  const ext = file.filename.toLowerCase().split('.').pop() || '';
   const categoryClass = meta?.category ? (CATEGORY_COLORS[meta.category] || CATEGORY_COLORS.other) : '';
 
   return (
     <div
-      className={`group relative bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer aspect-square ${selected ? 'ring-3 ring-blue-500 ring-offset-2' : ''}`}
-      onClick={() => selectMode ? onToggleSelect(image.key) : onClick()}
+      className={`group relative bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer aspect-square ${selected ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}
+      onClick={() => selectMode ? onToggleSelect(file.key) : onClick()}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={image.url} alt={image.filename} className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300" loading="lazy" />
-      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors duration-200" />
-
-      {selectMode && (
-        <div className={`absolute top-2 left-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${selected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white/80 border-gray-300'}`}>
-          {selected && <CheckIcon />}
+      {isImg ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={file.url} alt={file.filename} className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300" loading="lazy" />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors duration-200" />
+          {!selectMode && meta?.category && (
+            <div className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium ${categoryClass} opacity-0 group-hover:opacity-100 transition-opacity`}>{meta.category}</div>
+          )}
+          {!selectMode && meta?.description && (
+            <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+              <p className="text-white text-xs line-clamp-2">{meta.description}</p>
+              {meta.tags.length > 0 && (
+                <div className="flex gap-1 flex-wrap mt-1">
+                  {meta.tags.slice(0, 3).map((tag) => <span key={tag} className="text-white/70 text-xs">#{tag}</span>)}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 p-4 hover:bg-gray-100 transition-colors">
+          <div className={`w-14 h-14 rounded-2xl ${color} flex items-center justify-center mb-2.5 flex-shrink-0`}>
+            <FileTypeIcon ext={ext} />
+          </div>
+          <p className="text-sm text-gray-700 font-medium text-center line-clamp-2 w-full px-1 leading-tight">{file.filename}</p>
+          <p className="text-xs text-gray-400 mt-1">{formatBytes(file.size)}</p>
+          <span className="mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium uppercase tracking-wide bg-gray-200 text-gray-600">{ext}</span>
         </div>
       )}
-      {!selectMode && meta?.category && (
-        <div className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium ${categoryClass} opacity-0 group-hover:opacity-100 transition-opacity`}>{meta.category}</div>
-      )}
-      {!selectMode && (
-        <>
+
+      {selectMode ? (
+        <div className={`absolute top-2 left-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors z-10 ${selected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white/80 border-gray-300'}`}>
+          {selected && <CheckIcon />}
+        </div>
+      ) : (
+        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
           <button
-            onClick={(e) => { e.stopPropagation(); onShareRequest(image); }}
-            className="absolute top-2 right-10 p-1.5 bg-white/80 hover:bg-blue-500 hover:text-white text-gray-700 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 z-10"
-            title="Share image"
+            onClick={(e) => { e.stopPropagation(); onShareRequest(file); }}
+            className="p-1.5 bg-white/90 hover:bg-blue-500 hover:text-white text-gray-700 rounded-full shadow-sm transition-colors"
+            title="Share"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
             </svg>
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); onDeleteRequest(image); }}
-            className="absolute top-2 right-2 p-1.5 bg-white/80 hover:bg-red-500 hover:text-white text-gray-700 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 z-10"
-            title="Delete image"
+            onClick={(e) => { e.stopPropagation(); onDeleteRequest(file); }}
+            className="p-1.5 bg-white/90 hover:bg-red-500 hover:text-white text-gray-700 rounded-full shadow-sm transition-colors"
+            title="Delete"
           >
             <TrashIcon />
           </button>
-        </>
-      )}
-      {!selectMode && meta?.description && (
-        <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-          <p className="text-white text-xs line-clamp-2">{meta.description}</p>
-          {meta.tags.length > 0 && (
-            <div className="flex gap-1 flex-wrap mt-1">
-              {meta.tags.slice(0, 3).map((tag) => <span key={tag} className="text-white/70 text-xs">#{tag}</span>)}
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -822,8 +925,8 @@ function UploadModal({ allFolderPaths, defaultFolder, onClose, onStartUpload }: 
     : folder;
 
   const addRawFiles = (rawFiles: FileList | File[]) => {
-    const imgs = Array.from(rawFiles).filter((f) => f.type.startsWith('image/')).map((f) => ({ file: f, folder: activeFolder }));
-    setSelectedFiles((prev) => [...prev, ...imgs]);
+    const items = Array.from(rawFiles).map((f) => ({ file: f, folder: activeFolder }));
+    setSelectedFiles((prev) => [...prev, ...items]);
   };
 
   const handleFolderInput = (fileList: FileList | null) => {
@@ -831,7 +934,6 @@ function UploadModal({ allFolderPaths, defaultFolder, onClose, onStartUpload }: 
     const files: FileWithFolder[] = [];
     for (let i = 0; i < fileList.length; i++) {
       const file = fileList[i];
-      if (!file.type.startsWith('image/')) continue;
       const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath || '';
       const parts = rel.split('/');
       files.push({ file, folder: parts.length > 1 ? parts[0] : 'uncategorized' });
@@ -854,7 +956,7 @@ function UploadModal({ allFolderPaths, defaultFolder, onClose, onStartUpload }: 
         files.push(...sub);
       } else {
         const file = item.getAsFile();
-        if (file?.type.startsWith('image/')) files.push({ file, folder: activeFolder });
+        if (file) files.push({ file, folder: activeFolder });
       }
     }
     if (files.length > 0) setSelectedFiles((prev) => [...prev, ...files]);
@@ -864,7 +966,7 @@ function UploadModal({ allFolderPaths, defaultFolder, onClose, onStartUpload }: 
     <div className="fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
-          <div><h2 className="text-lg font-bold">Upload Images</h2><p className="text-xs text-gray-500 mt-0.5">Auto-tagged by GPT-4o-mini Vision</p></div>
+          <div><h2 className="text-lg font-bold">Upload Files</h2><p className="text-xs text-gray-500 mt-0.5">Images auto-tagged by AI · Any file type · Max 50 MB</p></div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
         </div>
 
@@ -876,14 +978,14 @@ function UploadModal({ allFolderPaths, defaultFolder, onClose, onStartUpload }: 
           className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors mb-4 ${dragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
         >
           <div className="text-4xl mb-2">📁</div>
-          <p className="text-gray-600 text-sm">Drag & drop images or folders here</p>
-          <p className="text-gray-400 text-xs mt-1">Max 10MB per file • AI analysis included</p>
+          <p className="text-gray-600 text-sm">Drag & drop files or folders here</p>
+          <p className="text-gray-400 text-xs mt-1">Any file type · Max 50 MB · Images auto-tagged by AI</p>
         </div>
 
         <div className="flex gap-3 mb-4">
           <label className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-medium text-center text-sm cursor-pointer hover:bg-blue-700 transition-colors">
             Select Files
-            <input type="file" multiple accept="image/*" className="hidden" onChange={(e) => addRawFiles(e.target.files || new FileList())} />
+            <input type="file" multiple className="hidden" onChange={(e) => addRawFiles(e.target.files || new FileList())} />
           </label>
           <label className="flex-1 py-2.5 border-2 border-blue-600 text-blue-600 rounded-xl font-medium text-center text-sm cursor-pointer hover:bg-blue-50 transition-colors">
             Select Folder
@@ -894,13 +996,24 @@ function UploadModal({ allFolderPaths, defaultFolder, onClose, onStartUpload }: 
 
         {selectedFiles.length > 0 && (
           <div className="flex gap-2 flex-wrap mb-4 max-h-32 overflow-y-auto">
-            {selectedFiles.map((f, i) => (
-              <div key={i} className="relative flex-shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={URL.createObjectURL(f.file)} alt="" className="w-14 h-14 object-cover rounded-lg border border-gray-200" />
-                <button onClick={() => setSelectedFiles((prev) => prev.filter((_, j) => j !== i))} className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-xs flex items-center justify-center">×</button>
-              </div>
-            ))}
+            {selectedFiles.map((f, i) => {
+              const { kind, color } = getFileKind(f.file.name);
+              const ext = f.file.name.split('.').pop() || '';
+              return (
+                <div key={i} className="relative flex-shrink-0">
+                  {kind === 'image' ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={URL.createObjectURL(f.file)} alt="" className="w-14 h-14 object-cover rounded-lg border border-gray-200" />
+                  ) : (
+                    <div className={`w-14 h-14 rounded-lg border border-gray-200 ${color} flex flex-col items-center justify-center gap-0.5`}>
+                      <FileTypeIcon ext={ext} />
+                      <span className="text-[9px] font-bold uppercase leading-none">{ext}</span>
+                    </div>
+                  )}
+                  <button onClick={() => setSelectedFiles((prev) => prev.filter((_, j) => j !== i))} className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-xs flex items-center justify-center">×</button>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -984,6 +1097,8 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
   // Share state
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [shareType, setShareType] = useState<'image' | 'folder'>('image');
@@ -1035,7 +1150,8 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
     key: r.key, url: r.url || '', size: r.size,
     lastModified: new Date(r.uploadedAt), folder: r.folder, filename: r.filename,
   }));
-  const lightboxImages = isSearchMode ? searchImages_ : displayImages;
+  // Lightbox only shows image files
+  const lightboxImages = (isSearchMode ? searchImages_ : displayImages).filter((f) => isImageFile(f.filename));
 
   const projectCount = (p: string) => Object.values(metadata).filter((m) => m.project === p).length;
 
@@ -1150,7 +1266,7 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
         files.push(...sub);
       } else {
         const file = item.getAsFile();
-        if (file?.type.startsWith('image/')) files.push({ file, folder: selectedFolder || 'uncategorized' });
+        if (file) files.push({ file, folder: selectedFolder || 'uncategorized' });
       }
     }
     if (files.length > 0) uploadFiles(files);
@@ -1361,6 +1477,22 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
     setShowShareDialog(true);
   }, []);
 
+  const handleFileClick = useCallback((file: GalleryImage) => {
+    if (isImageFile(file.filename)) {
+      const idx = lightboxImages.findIndex((img) => img.key === file.key);
+      if (idx !== -1) setLightboxIndex(idx);
+    } else if (file.filename.toLowerCase().endsWith('.pdf')) {
+      window.open(file.url, '_blank');
+    } else {
+      const a = document.createElement('a');
+      a.href = file.url;
+      a.download = file.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  }, [lightboxImages]);
+
   const handleCreateShare = useCallback(async () => {
     setCreatingShare(true);
     try {
@@ -1505,10 +1637,10 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
             <header className="flex items-center justify-between mb-4">
               <div>
                 <h1 className="text-xl font-bold text-gray-900">
-                  {selectedFolder ? selectedFolder.split('/').pop() : 'All Images'}
+                  {selectedFolder ? selectedFolder.split('/').pop() : 'All Files'}
                 </h1>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  {isSearchMode ? `${searchResults!.length} search results` : `${filteredImages.length} image${filteredImages.length !== 1 ? 's' : ''}`}
+                  {isSearchMode ? `${searchResults!.length} search results` : `${filteredImages.length} file${filteredImages.length !== 1 ? 's' : ''}`}
                   {selectedFolder && !isSearchMode && ` in ${selectedFolder}`}
                 </p>
               </div>
@@ -1516,10 +1648,25 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
                 <button
                   onClick={() => { setSelectMode((v) => !v); setSelectedKeys(new Set()); }}
                   className={`px-3 py-2 rounded-xl text-sm font-medium border transition-colors ${selectMode ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
-                  title="Select images"
+                  title="Select files"
                 >
                   ☑
                 </button>
+                {/* View toggle */}
+                <div className="flex border border-gray-200 rounded-xl overflow-hidden">
+                  <button onClick={() => setViewMode('grid')} className={`p-2 transition-colors ${viewMode === 'grid' ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`} title="Grid view">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                      <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                    </svg>
+                  </button>
+                  <button onClick={() => setViewMode('list')} className={`p-2 transition-colors ${viewMode === 'list' ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`} title="List view">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                      <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortOption)} className="text-sm px-3 py-2 border border-gray-200 rounded-xl bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 hidden sm:block">
                   <option value="newest">Newest</option>
                   <option value="oldest">Oldest</option>
@@ -1535,7 +1682,7 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
 
             {/* Search */}
             <div className="relative mb-4">
-              <input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search by tags, description, style, color..." className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search by tags, description, category, filename..." className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
               {searchQuery && <button onClick={() => { setSearchQuery(''); setSearchResults(null); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg">×</button>}
             </div>
@@ -1553,37 +1700,74 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
               </div>
             )}
 
-            {/* Grid */}
+            {/* File list/grid */}
             {searching || loading ? <SkeletonGrid />
-              : isSearchMode ? (
-                <>
-                  {searchResults!.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                      <div className="text-5xl mb-4">🔍</div>
-                      <p className="text-lg font-medium">No results for "{searchQuery}"</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                      {searchImages_.map((image, i) => (
-                        <ImageCard key={image.key} image={image} meta={metadata[image.key]} selectMode={selectMode} selected={selectedKeys.has(image.key)} onToggleSelect={toggleSelect} onDeleteRequest={requestDelete} onShareRequest={handleShareImage} onClick={() => setLightboxIndex(i)} />
-                      ))}
-                    </div>
-                  )}
-                </>
-              ) : displayImages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-24 text-gray-400">
-                  <div className="text-5xl mb-4">🖼️</div>
-                  <p className="text-lg font-medium">No images here</p>
-                  <p className="text-sm mt-1">Upload images or drag & drop files here</p>
-                  <button onClick={() => setShowUpload(true)} className="mt-6 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors">Upload first image</button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {displayImages.map((image, i) => (
-                    <ImageCard key={image.key} image={image} meta={metadata[image.key]} selectMode={selectMode} selected={selectedKeys.has(image.key)} onToggleSelect={toggleSelect} onDeleteRequest={requestDelete} onShareRequest={handleShareImage} onClick={() => setLightboxIndex(i)} />
-                  ))}
-                </div>
-              )
+              : (() => {
+                const activeFiles = isSearchMode ? searchImages_ : displayImages;
+                if (activeFiles.length === 0) return (
+                  <div className="flex flex-col items-center justify-center py-24 text-gray-400">
+                    <div className="text-5xl mb-4">{isSearchMode ? '🔍' : '📁'}</div>
+                    <p className="text-lg font-medium">{isSearchMode ? `No results for "${searchQuery}"` : 'No files here'}</p>
+                    {!isSearchMode && <><p className="text-sm mt-1">Upload files or drag & drop here</p>
+                      <button onClick={() => setShowUpload(true)} className="mt-6 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors">Upload first file</button></>}
+                  </div>
+                );
+
+                if (viewMode === 'list') return (
+                  <div className="space-y-0.5">
+                    {activeFiles.map((file) => {
+                      const { kind, color } = getFileKind(file.filename);
+                      const ext = file.filename.split('.').pop() || '';
+                      return (
+                        <div
+                          key={file.key}
+                          className={`flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 rounded-xl cursor-pointer group transition-colors ${selectedKeys.has(file.key) && selectMode ? 'bg-blue-50' : ''}`}
+                          onClick={() => selectMode ? toggleSelect(file.key) : handleFileClick(file)}
+                        >
+                          {selectMode && (
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${selectedKeys.has(file.key) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
+                              {selectedKeys.has(file.key) && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                            </div>
+                          )}
+                          {kind === 'image' ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={file.url} alt="" className="w-10 h-10 object-cover rounded-lg flex-shrink-0" />
+                          ) : (
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
+                              <FileTypeIcon ext={ext} />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">{file.filename}</p>
+                            <p className="text-xs text-gray-400">{file.folder} · {formatBytes(file.size)}</p>
+                          </div>
+                          <span className="text-xs text-gray-400 shrink-0 hidden sm:block">
+                            {new Date(file.lastModified).toLocaleDateString()}
+                          </span>
+                          {!selectMode && (
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                              <button onClick={(e) => { e.stopPropagation(); handleShareImage(file); }} className="p-1.5 hover:bg-blue-100 text-gray-500 hover:text-blue-600 rounded-lg transition-colors" title="Share">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); requestDelete(file); }} className="p-1.5 hover:bg-red-100 text-gray-500 hover:text-red-600 rounded-lg transition-colors" title="Delete">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {activeFiles.map((file) => (
+                      <FileCard key={file.key} file={file} meta={metadata[file.key]} selectMode={selectMode} selected={selectedKeys.has(file.key)} onToggleSelect={toggleSelect} onDeleteRequest={requestDelete} onShareRequest={handleShareImage} onClick={() => handleFileClick(file)} />
+                    ))}
+                  </div>
+                );
+              })()
             }
           </div>
         </div>
@@ -1596,8 +1780,8 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
         <div className="fixed inset-0 bg-blue-500/10 border-4 border-dashed border-blue-500 z-40 flex items-center justify-center pointer-events-none">
           <div className="bg-white rounded-2xl p-8 shadow-xl text-center">
             <span className="text-blue-500 flex justify-center mb-4"><UploadIcon /></span>
-            <p className="text-lg font-semibold text-gray-800">Drop files or folders here</p>
-            <p className="text-sm text-gray-500 mt-1">{selectedFolder ? `→ ${selectedFolder}` : 'Will go to uncategorized'}</p>
+            <p className="text-lg font-semibold text-gray-800">Drop any files or folders here</p>
+            <p className="text-sm text-gray-500 mt-1">{selectedFolder ? `→ ${selectedFolder}` : '→ uncategorized'}</p>
           </div>
         </div>
       )}
