@@ -4,11 +4,13 @@ import { listImages, listFolders } from '@/lib/r2';
 import { loadMetadata } from '@/lib/metadata';
 import { GalleryClient } from '@/components/GalleryClient';
 
+export const dynamic = 'force-dynamic';
+
 export default async function HomePage() {
   const authed = await isAuthenticated();
   if (!authed) redirect('/login');
 
-  const [images, folders, metadataStore, currentUser] = await Promise.all([
+  const [images, folders, metadataStore, user] = await Promise.all([
     listImages(),
     listFolders(),
     loadMetadata(),
@@ -22,7 +24,7 @@ export default async function HomePage() {
         initialFolders={folders}
         initialMetadata={metadataStore.images}
         initialProjects={metadataStore.projects}
-        currentUser={currentUser}
+        user={user}
       />
     </main>
   );

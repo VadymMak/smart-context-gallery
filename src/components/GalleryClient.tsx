@@ -18,7 +18,7 @@ interface Props {
   initialFolders: string[];
   initialMetadata: Record<string, ImageMetadata>;
   initialProjects: string[];
-  currentUser: CurrentUser | null;
+  user: CurrentUser | null;
 }
 
 interface Toast {
@@ -791,7 +791,7 @@ function SkeletonGrid() {
 
 // ─── Main Gallery Client ───────────────────────────────────────────────────────
 
-export function GalleryClient({ initialImages, initialFolders, initialMetadata, initialProjects, currentUser }: Props) {
+export function GalleryClient({ initialImages, initialFolders, initialMetadata, initialProjects, user }: Props) {
   const [images, setImages] = useState<GalleryImage[]>(initialImages);
   const [folders, setFolders] = useState<string[]>(initialFolders);
   const [metadata, setMetadata] = useState<Record<string, ImageMetadata>>(initialMetadata);
@@ -1105,13 +1105,40 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
 
   return (
     <div
-      className="max-w-7xl mx-auto px-4 py-6 min-h-screen"
       onDragEnter={handlePageDragEnter}
       onDragLeave={handlePageDragLeave}
       onDragOver={handlePageDragOver}
       onDrop={handlePageDrop}
     >
-      {/* Header */}
+      {/* User header bar */}
+      <div className="bg-white border-b border-gray-100 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium">
+            {user?.displayName?.charAt(0)?.toUpperCase() || 'U'}
+          </div>
+          <span className="text-sm text-gray-700 font-medium">{user?.displayName || 'User'}</span>
+          {user?.role === 'admin' && (
+            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">admin</span>
+          )}
+        </div>
+        <div className="flex items-center gap-4">
+          {user?.role === 'admin' && (
+            <a href="/settings" className="text-sm text-gray-500 hover:text-gray-800 flex items-center gap-1 transition-colors">
+              <SettingsIcon /> Settings
+            </a>
+          )}
+          <button
+            onClick={handleLogout}
+            className="text-sm text-gray-500 hover:text-red-600 flex items-center gap-1 transition-colors"
+          >
+            <LogoutIcon /> Logout
+          </button>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="max-w-7xl mx-auto px-4 py-6 min-h-screen">
+      {/* Gallery header */}
       <header className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">AK Gallery</h1>
@@ -1138,20 +1165,6 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
           <button onClick={() => setShowUpload(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors shadow-sm">
             <span className="text-lg leading-none">+</span> Upload
           </button>
-
-          {currentUser && (
-            <div className="flex items-center gap-1 pl-2 border-l border-gray-200">
-              <span className="text-sm text-gray-600 hidden sm:block">{currentUser.displayName}</span>
-              {currentUser.role === 'admin' && (
-                <a href="/settings" className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors text-gray-500" title="Settings">
-                  <SettingsIcon />
-                </a>
-              )}
-              <button onClick={handleLogout} className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors text-gray-500" title="Sign out">
-                <LogoutIcon />
-              </button>
-            </div>
-          )}
         </div>
       </header>
 
@@ -1334,6 +1347,7 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
 
       {/* Toasts */}
       <ToastList toasts={toasts} onRemove={removeToast} />
+      </div>
     </div>
   );
 }
