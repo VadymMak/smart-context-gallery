@@ -238,11 +238,12 @@ interface FolderTreeItemProps {
   onCreateSubfolder: (parentPath: string) => void;
   onRename: (path: string, newName: string) => void;
   onDelete: (path: string) => void;
+  onShare: (path: string) => void;
   depth: number;
   isRoot?: boolean;
 }
 
-function FolderTreeItem({ node, selectedPath, onSelect, onCreateSubfolder, onRename, onDelete, depth, isRoot }: FolderTreeItemProps) {
+function FolderTreeItem({ node, selectedPath, onSelect, onCreateSubfolder, onRename, onDelete, onShare, depth, isRoot }: FolderTreeItemProps) {
   const [isExpanded, setIsExpanded] = useState(isRoot || depth === 0);
   const [showMenu, setShowMenu] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -359,6 +360,17 @@ function FolderTreeItem({ node, selectedPath, onSelect, onCreateSubfolder, onRen
                   </svg>
                   Rename
                 </button>
+                <button
+                  onClick={() => { onShare(node.path); setShowMenu(false); }}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                  </svg>
+                  Share folder
+                </button>
                 <div className="h-px bg-gray-100 my-1" />
                 <button
                   onClick={() => { onDelete(node.path); setShowMenu(false); }}
@@ -387,6 +399,7 @@ function FolderTreeItem({ node, selectedPath, onSelect, onCreateSubfolder, onRen
               onCreateSubfolder={onCreateSubfolder}
               onRename={onRename}
               onDelete={onDelete}
+              onShare={onShare}
               depth={depth + 1}
             />
           ))}
@@ -491,9 +504,10 @@ function DeleteConfirmModal({ image, deleting, onConfirm, onCancel }: {
 
 // ─── Image Card ───────────────────────────────────────────────────────────────
 
-function ImageCard({ image, meta, selectMode, selected, onToggleSelect, onDeleteRequest, onClick }: {
+function ImageCard({ image, meta, selectMode, selected, onToggleSelect, onDeleteRequest, onShareRequest, onClick }: {
   image: GalleryImage; meta?: ImageMetadata; selectMode: boolean; selected: boolean;
-  onToggleSelect: (key: string) => void; onDeleteRequest: (image: GalleryImage) => void; onClick: () => void;
+  onToggleSelect: (key: string) => void; onDeleteRequest: (image: GalleryImage) => void;
+  onShareRequest: (image: GalleryImage) => void; onClick: () => void;
 }) {
   const categoryClass = meta?.category ? (CATEGORY_COLORS[meta.category] || CATEGORY_COLORS.other) : '';
 
@@ -515,13 +529,26 @@ function ImageCard({ image, meta, selectMode, selected, onToggleSelect, onDelete
         <div className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium ${categoryClass} opacity-0 group-hover:opacity-100 transition-opacity`}>{meta.category}</div>
       )}
       {!selectMode && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onDeleteRequest(image); }}
-          className="absolute top-2 right-2 p-1.5 bg-white/80 hover:bg-red-500 hover:text-white text-gray-700 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 z-10"
-          title="Delete image"
-        >
-          <TrashIcon />
-        </button>
+        <>
+          <button
+            onClick={(e) => { e.stopPropagation(); onShareRequest(image); }}
+            className="absolute top-2 right-10 p-1.5 bg-white/80 hover:bg-blue-500 hover:text-white text-gray-700 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 z-10"
+            title="Share image"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDeleteRequest(image); }}
+            className="absolute top-2 right-2 p-1.5 bg-white/80 hover:bg-red-500 hover:text-white text-gray-700 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 z-10"
+            title="Delete image"
+          >
+            <TrashIcon />
+          </button>
+        </>
       )}
       {!selectMode && meta?.description && (
         <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
@@ -957,6 +984,16 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
+  // Share state
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareType, setShareType] = useState<'image' | 'folder'>('image');
+  const [shareTarget, setShareTarget] = useState('');
+  const [shareLabel, setShareLabel] = useState('');
+  const [shareExpiry, setShareExpiry] = useState(7);
+  const [shareUrl, setShareUrl] = useState('');
+  const [creatingShare, setCreatingShare] = useState(false);
+  const [copied, setCopied] = useState(false);
+
   // ── Derived state ──────────────────────────────────────────────────────────
 
   const folderTree = useMemo(
@@ -1306,6 +1343,42 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
     window.location.href = '/login';
   }, []);
 
+  const handleShareImage = useCallback((image: GalleryImage) => {
+    setShareType('image');
+    setShareTarget(image.key);
+    setShareLabel('');
+    setShareUrl('');
+    setCopied(false);
+    setShowShareDialog(true);
+  }, []);
+
+  const handleShareFolder = useCallback((folderPath: string) => {
+    setShareType('folder');
+    setShareTarget(folderPath);
+    setShareLabel('');
+    setShareUrl('');
+    setCopied(false);
+    setShowShareDialog(true);
+  }, []);
+
+  const handleCreateShare = useCallback(async () => {
+    setCreatingShare(true);
+    try {
+      const res = await fetch('/api/shares', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: shareType, target: shareTarget, expiresInDays: shareExpiry, label: shareLabel || undefined }),
+      });
+      const data = await res.json();
+      if (res.ok) setShareUrl(data.url);
+      else addToast(data.error || 'Failed to create share link', 'error');
+    } catch {
+      addToast('Failed to create share link', 'error');
+    } finally {
+      setCreatingShare(false);
+    }
+  }, [shareType, shareTarget, shareExpiry, shareLabel, addToast]);
+
   const toggleSelect = (key: string) => {
     setSelectedKeys((prev) => {
       const next = new Set(prev);
@@ -1393,6 +1466,7 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
               onCreateSubfolder={handleCreateSubfolder}
               onRename={handleRenameFolder}
               onDelete={handleDeleteFolder}
+              onShare={handleShareFolder}
               depth={0}
               isRoot
             />
@@ -1491,7 +1565,7 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                       {searchImages_.map((image, i) => (
-                        <ImageCard key={image.key} image={image} meta={metadata[image.key]} selectMode={selectMode} selected={selectedKeys.has(image.key)} onToggleSelect={toggleSelect} onDeleteRequest={requestDelete} onClick={() => setLightboxIndex(i)} />
+                        <ImageCard key={image.key} image={image} meta={metadata[image.key]} selectMode={selectMode} selected={selectedKeys.has(image.key)} onToggleSelect={toggleSelect} onDeleteRequest={requestDelete} onShareRequest={handleShareImage} onClick={() => setLightboxIndex(i)} />
                       ))}
                     </div>
                   )}
@@ -1506,7 +1580,7 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                   {displayImages.map((image, i) => (
-                    <ImageCard key={image.key} image={image} meta={metadata[image.key]} selectMode={selectMode} selected={selectedKeys.has(image.key)} onToggleSelect={toggleSelect} onDeleteRequest={requestDelete} onClick={() => setLightboxIndex(i)} />
+                    <ImageCard key={image.key} image={image} meta={metadata[image.key]} selectMode={selectMode} selected={selectedKeys.has(image.key)} onToggleSelect={toggleSelect} onDeleteRequest={requestDelete} onShareRequest={handleShareImage} onClick={() => setLightboxIndex(i)} />
                   ))}
                 </div>
               )
@@ -1617,6 +1691,78 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
           onConfirm={executeDelete}
           onCancel={() => { setShowDeleteConfirm(false); setImageToDelete(null); }}
         />
+      )}
+
+      {/* Share dialog */}
+      {showShareDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]" onClick={() => { setShowShareDialog(false); setShareUrl(''); }}>
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-1">
+              Share {shareType === 'image' ? 'Image' : 'Folder'}
+            </h3>
+            <p className="text-xs text-gray-400 mb-4">
+              {shareType === 'folder' ? `Folder: ${shareTarget}` : shareTarget.split('/').pop()}
+            </p>
+
+            <input
+              type="text"
+              value={shareLabel}
+              onChange={(e) => setShareLabel(e.target.value)}
+              placeholder="Add a description (optional)"
+              className="w-full px-4 py-2 border border-gray-200 rounded-xl mb-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+
+            <p className="text-xs text-gray-500 font-medium mb-2">Expires after</p>
+            <div className="flex gap-2 mb-5">
+              {[1, 7, 30].map((days) => (
+                <button
+                  key={days}
+                  onClick={() => setShareExpiry(days)}
+                  className={`flex-1 py-2 text-sm rounded-xl border transition-colors ${shareExpiry === days ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                >
+                  {days === 1 ? '1 day' : days === 7 ? '7 days' : '30 days'}
+                </button>
+              ))}
+            </div>
+
+            {shareUrl && (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={shareUrl}
+                    readOnly
+                    className="flex-1 bg-transparent text-sm text-gray-700 outline-none min-w-0 truncate"
+                  />
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                    className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 shrink-0 transition-colors"
+                  >
+                    {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowShareDialog(false); setShareUrl(''); setShareLabel(''); }}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 font-medium transition-colors"
+              >
+                {shareUrl ? 'Done' : 'Cancel'}
+              </button>
+              {!shareUrl && (
+                <button
+                  onClick={handleCreateShare}
+                  disabled={creatingShare}
+                  className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium disabled:opacity-50 transition-colors"
+                >
+                  {creatingShare ? 'Creating…' : 'Create Link'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       <ToastList toasts={toasts} onRemove={removeToast} />
