@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@latest . --typescript --tailwind --app --src-dir --no-import-alias --eslint --yes)",
+      "Bash(mv .env.local /tmp/ak-gallery-env.local && npx create-next-app@latest . --typescript --tailwind --app --src-dir --no-import-alias --eslint --yes 2>&1)"
+    ],
+    "additionalDirectories": [
+      "/Users/vadymmak/Documents/projects/smart-context-gallery"
+    ]
+  }
+}
