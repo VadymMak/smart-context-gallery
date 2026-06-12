@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+const PUBLIC_PATHS = ['/login', '/api/auth'];
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (pathname === '/login' || pathname === '/api/auth') {
+  // Allow login page and auth endpoints (including logout)
+  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
     return NextResponse.next();
   }
 

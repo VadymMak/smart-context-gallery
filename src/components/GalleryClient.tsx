@@ -6,11 +6,19 @@ import type { ImageMetadata } from '@/lib/metadata';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface CurrentUser {
+  id: string;
+  username: string;
+  displayName: string;
+  role: 'admin' | 'member';
+}
+
 interface Props {
   initialImages: GalleryImage[];
   initialFolders: string[];
   initialMetadata: Record<string, ImageMetadata>;
   initialProjects: string[];
+  currentUser: CurrentUser | null;
 }
 
 interface Toast {
@@ -67,7 +75,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 function ToastList({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: number) => void }) {
   return (
-    <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-50 pointer-events-none">
+    <div className="fixed top-6 right-6 flex flex-col gap-2 z-50 pointer-events-none">
       {toasts.map((t) => (
         <div
           key={t.id}
@@ -181,7 +189,9 @@ function Lightbox({
   onPrev,
   onNext,
   projects,
+  folders,
   onAssignProject,
+  onMoveFolder,
 }: {
   images: GalleryImage[];
   index: number;
@@ -190,13 +200,17 @@ function Lightbox({
   onPrev: () => void;
   onNext: () => void;
   projects: string[];
+  folders: string[];
   onAssignProject: (key: string, project: string) => Promise<void>;
+  onMoveFolder: (key: string, targetFolder: string) => Promise<void>;
 }) {
   const image = images[index];
   const imgMeta = image ? meta[image.key] : undefined;
   const [showSidebar, setShowSidebar] = useState(true);
   const [assigningProject, setAssigningProject] = useState('');
   const [newProjectInput, setNewProjectInput] = useState('');
+  const [movingFolder, setMovingFolder] = useState(false);
+  const [newFolderInput, setNewFolderInput] = useState('');
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -215,6 +229,14 @@ function Lightbox({
     await onAssignProject(image.key, project);
     setAssigningProject('');
     setNewProjectInput('');
+  };
+
+  const handleMoveFolder = async (targetFolder: string) => {
+    if (!targetFolder.trim() || targetFolder === imgMeta?.folder) return;
+    setMovingFolder(true);
+    await onMoveFolder(image.key, targetFolder.trim());
+    setMovingFolder(false);
+    setNewFolderInput('');
   };
 
   return (
@@ -301,6 +323,40 @@ function Lightbox({
                   {imgMeta.project && <p className="text-white/70"><span className="text-white/40">Project:</span> {imgMeta.project}</p>}
                   <p className="text-white/70"><span className="text-white/40">Size:</span> {formatBytes(imgMeta.size)}</p>
                   <p className="text-white/70"><span className="text-white/40">Uploaded:</span> {new Date(imgMeta.uploadedAt).toLocaleDateString()}</p>
+                </div>
+              </div>
+
+              {/* Move folder */}
+              <div>
+                <p className="text-white/50 text-xs uppercase tracking-wider mb-2">Move to Folder</p>
+                <div className="space-y-1.5">
+                  {folders.filter((f) => f !== imgMeta?.folder).map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => handleMoveFolder(f)}
+                      disabled={movingFolder}
+                      className="w-full text-left px-3 py-1.5 rounded-lg text-xs bg-white/5 hover:bg-white/10 text-white/70 transition-colors disabled:opacity-50"
+                    >
+                      → {f}
+                    </button>
+                  ))}
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      value={newFolderInput}
+                      onChange={(e) => setNewFolderInput(e.target.value)}
+                      placeholder="New folder name..."
+                      className="flex-1 px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/30"
+                      onKeyDown={(e) => e.key === 'Enter' && handleMoveFolder(newFolderInput)}
+                    />
+                    <button
+                      onClick={() => handleMoveFolder(newFolderInput)}
+                      disabled={movingFolder || !newFolderInput.trim()}
+                      className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {movingFolder ? '...' : '→'}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -604,7 +660,7 @@ function SkeletonGrid() {
 
 // ─── Main Gallery Client ───────────────────────────────────────────────────────
 
-export function GalleryClient({ initialImages, initialFolders, initialMetadata, initialProjects }: Props) {
+export function GalleryClient({ initialImages, initialFolders, initialMetadata, initialProjects, currentUser }: Props) {
   const [images, setImages] = useState<GalleryImage[]>(initialImages);
   const [folders, setFolders] = useState<string[]>(initialFolders);
   const [metadata, setMetadata] = useState<Record<string, ImageMetadata>>(initialMetadata);
@@ -744,6 +800,41 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
     }
   }, [addToast, fetchProjects]);
 
+  const handleMoveFolder = useCallback(async (key: string, targetFolder: string) => {
+    try {
+      const res = await fetch('/api/images/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keys: [key], targetFolder }),
+      });
+      if (!res.ok) throw new Error('Move failed');
+      const { moved } = await res.json() as { moved: { oldKey: string; newKey: string }[] };
+      if (moved.length > 0) {
+        const { oldKey, newKey } = moved[0];
+        setImages((prev) => prev.map((img) =>
+          img.key === oldKey ? { ...img, key: newKey, folder: targetFolder } : img
+        ));
+        setMetadata((prev) => {
+          const next = { ...prev };
+          if (next[oldKey]) {
+            next[newKey] = { ...next[oldKey], key: newKey, folder: targetFolder };
+            delete next[oldKey];
+          }
+          return next;
+        });
+        await fetchImages(activeFolder || undefined);
+      }
+      addToast(`Moved to "${targetFolder}"`, 'success');
+    } catch {
+      addToast('Failed to move image', 'error');
+    }
+  }, [addToast, fetchImages, activeFolder]);
+
+  const handleLogout = useCallback(async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+  }, []);
+
   // Build filtered + sorted image list
   let displayImages = images;
   if (activeProject) {
@@ -794,6 +885,34 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
             <span className="text-lg leading-none">+</span>
             Upload
           </button>
+          {currentUser && (
+            <div className="flex items-center gap-1 pl-2 border-l border-gray-200">
+              <span className="text-sm text-gray-600 hidden sm:block">{currentUser.displayName}</span>
+              {currentUser.role === 'admin' && (
+                <a
+                  href="/settings"
+                  className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors text-gray-500"
+                  title="Settings"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.07 4.93A10 10 0 1 0 4.93 19.07M19.07 4.93l-1.4 2.42M4.93 19.07l1.4-2.42"/>
+                  </svg>
+                </a>
+              )}
+              <button
+                onClick={handleLogout}
+                className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors text-gray-500"
+                title="Sign out"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                  <polyline points="16 17 21 12 16 7"/>
+                  <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -919,10 +1038,12 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
           index={lightboxIndex}
           meta={metadata}
           projects={projects}
+          folders={folders}
           onClose={() => setLightboxIndex(null)}
           onPrev={() => setLightboxIndex((i) => (i !== null && i > 0 ? i - 1 : i))}
           onNext={() => setLightboxIndex((i) => (i !== null && i < lightboxImages.length - 1 ? i + 1 : i))}
           onAssignProject={handleAssignProject}
+          onMoveFolder={handleMoveFolder}
         />
       )}
 

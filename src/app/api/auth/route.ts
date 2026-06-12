@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyPassword, setAuthCookie } from '@/lib/auth';
+import { authenticateUser, setAuthCookies } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
-  const { password } = await request.json();
+  const { username, password } = await request.json();
 
-  if (!verifyPassword(password)) {
-    return NextResponse.json({ error: 'Wrong password' }, { status: 401 });
+  if (!username || !password) {
+    return NextResponse.json({ error: 'Username and password required' }, { status: 400 });
   }
 
-  const response = NextResponse.json({ success: true });
-  return setAuthCookie(response);
+  const user = await authenticateUser(username, password);
+  if (!user) {
+    return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+  }
+
+  const response = NextResponse.json({ success: true, user });
+  return setAuthCookies(response, user);
 }

@@ -1,4 +1,4 @@
-import { isAuthenticated } from '@/lib/auth';
+import { isAuthenticated, getCurrentUser } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { listImages, listFolders } from '@/lib/r2';
 import { loadMetadata } from '@/lib/metadata';
@@ -8,10 +8,11 @@ export default async function HomePage() {
   const authed = await isAuthenticated();
   if (!authed) redirect('/login');
 
-  const [images, folders, metadataStore] = await Promise.all([
+  const [images, folders, metadataStore, currentUser] = await Promise.all([
     listImages(),
     listFolders(),
     loadMetadata(),
+    getCurrentUser(),
   ]);
 
   return (
@@ -21,6 +22,7 @@ export default async function HomePage() {
         initialFolders={folders}
         initialMetadata={metadataStore.images}
         initialProjects={metadataStore.projects}
+        currentUser={currentUser}
       />
     </main>
   );

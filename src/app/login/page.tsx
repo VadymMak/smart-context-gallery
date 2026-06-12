@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,14 +18,15 @@ export default function LoginPage() {
     const res = await fetch('/api/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ username, password }),
     });
 
     if (res.ok) {
       router.push('/');
       router.refresh();
     } else {
-      setError('Wrong password');
+      const data = await res.json();
+      setError(data.error || 'Login failed');
     }
     setLoading(false);
   };
@@ -36,22 +38,32 @@ export default function LoginPage() {
         <p className="text-gray-500 text-center mb-6 text-sm">Private illustration gallery</p>
 
         <input
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="Username"
+          className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+          autoFocus
+          autoComplete="username"
+        />
+
+        <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="Enter password"
+          placeholder="Password"
           className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-          autoFocus
+          autoComplete="current-password"
         />
 
         {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
 
         <button
           type="submit"
-          disabled={loading || !password}
+          disabled={loading || !username || !password}
           className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
         >
-          {loading ? 'Checking...' : 'Enter'}
+          {loading ? 'Signing in...' : 'Sign In'}
         </button>
       </form>
     </div>
