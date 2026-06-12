@@ -1,7 +1,7 @@
 import { S3Client, ListObjectsV2Command, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-const r2 = new S3Client({
+export const r2 = new S3Client({
   region: 'auto',
   endpoint: process.env.R2_ENDPOINT!,
   credentials: {
@@ -10,7 +10,7 @@ const r2 = new S3Client({
   },
 });
 
-const BUCKET = process.env.R2_BUCKET_NAME!;
+export const BUCKET = process.env.R2_BUCKET_NAME!;
 
 export interface GalleryImage {
   key: string;
@@ -33,7 +33,7 @@ export async function listImages(folder?: string): Promise<GalleryImage[]> {
 
   const images: GalleryImage[] = await Promise.all(
     objects
-      .filter((obj) => obj.Key && !obj.Key.endsWith('/'))
+      .filter((obj) => obj.Key && !obj.Key.endsWith('/') && obj.Key !== '_metadata.json')
       .map(async (obj) => {
         const url = await getSignedUrl(
           r2,

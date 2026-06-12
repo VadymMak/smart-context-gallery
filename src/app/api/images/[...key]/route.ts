@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { deleteImage } from '@/lib/r2';
+import { removeImageMetadata } from '@/lib/metadata';
 
 export async function DELETE(
   request: NextRequest,
@@ -14,6 +15,7 @@ export async function DELETE(
 
   try {
     await deleteImage(imageKey);
+    await removeImageMetadata(imageKey);
     return NextResponse.json({ deleted: imageKey });
   } catch (error) {
     console.error('[images] Delete error:', error);

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { listImages, uploadImage } from '@/lib/r2';
+import { analyzeImage } from '@/lib/vision';
+import { addImageMetadata, type ImageMetadata } from '@/lib/metadata';
 
 export async function GET(request: NextRequest) {
   const authError = await requireAuth();
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
 
     const MAX_SIZE = 10 * 1024 * 1024;
-    const results: { key: string; filename: string }[] = [];
+    const results: { key: string; filename: string; tags: string[]; description: string }[] = [];
 
     for (const file of files) {
       if (file.size > MAX_SIZE) {
@@ -50,7 +52,26 @@ export async function POST(request: NextRequest) {
 
       const buffer = Buffer.from(await file.arrayBuffer());
       const key = await uploadImage(buffer, file.name, file.type, folder);
-      results.push({ key, filename: file.name });
+
+      const analysis = await analyzeImage(buffer, file.type);
+
+      const meta: ImageMetadata = {
+        key,
+        filename: file.name,
+        folder,
+        size: file.size,
+        uploadedAt: new Date().toISOString(),
+        description: analysis.description,
+        tags: analysis.tags,
+        category: analysis.category,
+        style: analysis.style,
+        colors: analysis.colors,
+      };
+
+      await addImageMetadata(meta);
+      console.log(`[vision] ${file.name}: ${analysis.tags.join(', ')}`);
+
+      results.push({ key, filename: file.name, tags: analysis.tags, description: analysis.description });
     }
 
     return NextResponse.json({ uploaded: results });
