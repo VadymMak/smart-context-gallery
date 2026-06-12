@@ -20,7 +20,7 @@ interface UserStore {
 
 const USERS_KEY = '_users.json';
 
-async function loadUsers(): Promise<UserStore> {
+export async function loadUsers(): Promise<UserStore> {
   try {
     const command = new GetObjectCommand({ Bucket: BUCKET, Key: USERS_KEY });
     const response = await r2.send(command);
@@ -36,7 +36,7 @@ async function loadUsers(): Promise<UserStore> {
   }
 }
 
-async function saveUsers(store: UserStore): Promise<void> {
+export async function saveUsers(store: UserStore): Promise<void> {
   await r2.send(new PutObjectCommand({
     Bucket: BUCKET,
     Key: USERS_KEY,

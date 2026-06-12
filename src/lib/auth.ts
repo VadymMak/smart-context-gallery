@@ -1,22 +1,37 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { verifyUser, hasUsers, createUser, type User } from '@/lib/users';
+import bcrypt from 'bcryptjs';
+import { verifyUser, loadUsers, saveUsers, type User } from '@/lib/users';
 
 const AUTH_COOKIE = 'ak-gallery-auth';
 const USER_COOKIE = 'ak-gallery-user';
 
 async function ensureAdminExists(): Promise<void> {
-  const exists = await hasUsers();
-  if (exists) return;
-
   const seed = process.env.ADMIN_SEED;
   if (!seed) return;
 
-  const [username, password, displayName] = seed.split(':');
-  if (!username || !password) return;
+  const store = await loadUsers();
+  const userEntries = seed.split(',');
 
-  await createUser(username, password, displayName || username, 'admin');
-  console.log(`[auth] Admin user "${username}" created from ADMIN_SEED`);
+  for (const entry of userEntries) {
+    const [username, password, displayName, role] = entry.split(':');
+    if (!username || !password) continue;
+
+    if (store.users.find((u) => u.username === username)) continue;
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    store.users.push({
+      id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      username,
+      displayName: displayName || username,
+      role: (role as 'admin' | 'member') || 'member',
+      createdAt: new Date().toISOString(),
+      passwordHash,
+    });
+    console.log(`[auth] User "${username}" created from ADMIN_SEED`);
+  }
+
+  await saveUsers(store);
 }
 
 export async function authenticateUser(username: string, password: string): Promise<User | null> {
