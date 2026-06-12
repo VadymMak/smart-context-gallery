@@ -31,9 +31,16 @@ export async function listImages(folder?: string): Promise<GalleryImage[]> {
   const response = await r2.send(command);
   const objects = response.Contents || [];
 
+  const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.heic'];
+
   const images: GalleryImage[] = await Promise.all(
     objects
-      .filter((obj) => obj.Key && !obj.Key.endsWith('/') && obj.Key !== '_metadata.json')
+      .filter((obj) => {
+        if (!obj.Key || obj.Key.endsWith('/')) return false;
+        if (obj.Key.startsWith('_')) return false;
+        const ext = obj.Key.toLowerCase().split('.').pop();
+        return ext !== undefined && IMAGE_EXTENSIONS.includes(`.${ext}`);
+      })
       .map(async (obj) => {
         const url = await getSignedUrl(
           r2,
