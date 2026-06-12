@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, getCurrentUser } from '@/lib/auth';
 import { deleteImage } from '@/lib/r2';
 import { removeImageMetadata } from '@/lib/metadata';
 
@@ -10,8 +10,15 @@ export async function DELETE(
   const authError = await requireAuth();
   if (authError) return authError;
 
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const { key } = await params;
   const imageKey = key.join('/');
+
+  if (!imageKey.startsWith(`${user.id}/`)) {
+    return NextResponse.json({ error: 'Forbidden — not your image' }, { status: 403 });
+  }
 
   try {
     await deleteImage(imageKey);

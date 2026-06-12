@@ -10,20 +10,34 @@ export default async function HomePage() {
   const authed = await isAuthenticated();
   if (!authed) redirect('/login');
 
-  const [images, folders, metadataStore, user] = await Promise.all([
-    listImages(),
-    listFolders(),
+  const user = await getCurrentUser();
+  if (!user) redirect('/login');
+
+  const [images, folders, metadataStore] = await Promise.all([
+    listImages(undefined, user.id),
+    listFolders(user.id),
     loadMetadata(),
-    getCurrentUser(),
   ]);
+
+  // Scope metadata to this user's images only
+  const userMetadata = Object.fromEntries(
+    Object.entries(metadataStore.images).filter(([key]) => key.startsWith(`${user.id}/`))
+  );
+  const userProjects = [
+    ...new Set(
+      Object.values(userMetadata)
+        .map((m) => m.project)
+        .filter((p): p is string => !!p)
+    ),
+  ];
 
   return (
     <main className="min-h-screen bg-gray-50">
       <GalleryClient
         initialImages={images}
         initialFolders={folders}
-        initialMetadata={metadataStore.images}
-        initialProjects={metadataStore.projects}
+        initialMetadata={userMetadata}
+        initialProjects={userProjects}
         user={user}
       />
     </main>

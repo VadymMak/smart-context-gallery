@@ -65,11 +65,13 @@ export async function removeImageMetadata(key: string): Promise<void> {
   await saveMetadata(store);
 }
 
-export async function searchImages(query: string): Promise<ImageMetadata[]> {
+export async function searchImages(query: string, userId?: string): Promise<ImageMetadata[]> {
   const store = await loadMetadata();
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
 
   return Object.values(store.images).filter((img) => {
+    if (userId && !img.key.startsWith(`${userId}/`)) return false;
+
     const searchable = [
       img.description,
       ...img.tags,
@@ -85,9 +87,12 @@ export async function searchImages(query: string): Promise<ImageMetadata[]> {
   });
 }
 
-export async function getProjectImages(project: string): Promise<ImageMetadata[]> {
+export async function getProjectImages(project: string, userId?: string): Promise<ImageMetadata[]> {
   const store = await loadMetadata();
-  return Object.values(store.images).filter((img) => img.project === project);
+  return Object.values(store.images).filter((img) => {
+    if (userId && !img.key.startsWith(`${userId}/`)) return false;
+    return img.project === project;
+  });
 }
 
 export async function assignProject(keys: string[], project: string): Promise<void> {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, getCurrentUser } from '@/lib/auth';
 import OpenAI from 'openai';
 import { searchImages, loadMetadata, assignProject } from '@/lib/metadata';
 
@@ -14,6 +14,9 @@ export async function POST(request: NextRequest) {
   const authError = await requireAuth();
   if (authError) return authError;
 
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const { message, history } = await request.json();
   if (!message) {
     return NextResponse.json({ error: 'Missing message' }, { status: 400 });
@@ -21,9 +24,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const store = await loadMetadata();
-    const imageCount = Object.keys(store.images).length;
-    const folders = [...new Set(Object.values(store.images).map((i) => i.folder))];
-    const projects = store.projects;
+    const userImages = Object.values(store.images).filter((i) => i.key.startsWith(`${user.id}/`));
+    const imageCount = userImages.length;
+    const folders = [...new Set(userImages.map((i) => i.folder))];
+    const projects = [...new Set(userImages.map((i) => i.project).filter((p): p is string => !!p))];
 
     const systemPrompt = `You are a gallery assistant for a personal illustration gallery.
 
@@ -72,7 +76,7 @@ Respond ONLY with valid JSON. Understand English, Russian, and Ukrainian — res
 
     switch (action.action) {
       case 'search': {
-        const images = await searchImages(String(action.params?.query || ''));
+        const images = await searchImages(String(action.params?.query || ''), user.id);
         result = {
           type: 'search',
           message: images.length
@@ -94,7 +98,7 @@ Respond ONLY with valid JSON. Understand English, Russian, and Ukrainian — res
           type: 'text',
           message: folders.length
             ? `Folders:\n${folders.map((f) => {
-                const count = Object.values(store.images).filter((i) => i.folder === f).length;
+                const count = userImages.filter((i) => i.folder === f).length;
                 return `• ${f} (${count} images)`;
               }).join('\n')}`
             : 'No folders yet.',
@@ -107,7 +111,7 @@ Respond ONLY with valid JSON. Understand English, Russian, and Ukrainian — res
           type: 'text',
           message: projects.length
             ? `Projects:\n${projects.map((p) => {
-                const count = Object.values(store.images).filter((i) => i.project === p).length;
+                const count = userImages.filter((i) => i.project === p).length;
                 return `• ${p} (${count} images)`;
               }).join('\n')}`
             : 'No projects yet. Say "add [images] to project [name]" to create one.',
@@ -116,7 +120,7 @@ Respond ONLY with valid JSON. Understand English, Russian, and Ukrainian — res
       }
 
       case 'move_to_project': {
-        const images = await searchImages(String(action.params?.query || ''));
+        const images = await searchImages(String(action.params?.query || ''), user.id);
         if (images.length === 0) {
           result = { type: 'text', message: `No images found matching "${action.params?.query}"` };
         } else {
@@ -131,11 +135,11 @@ Respond ONLY with valid JSON. Understand English, Russian, and Ukrainian — res
       }
 
       case 'stats': {
-        const categories = Object.values(store.images).reduce<Record<string, number>>((acc, img) => {
+        const categories = userImages.reduce<Record<string, number>>((acc, img) => {
           acc[img.category] = (acc[img.category] || 0) + 1;
           return acc;
         }, {});
-        const styles = Object.values(store.images).reduce<Record<string, number>>((acc, img) => {
+        const styles = userImages.reduce<Record<string, number>>((acc, img) => {
           acc[img.style] = (acc[img.style] || 0) + 1;
           return acc;
         }, {});

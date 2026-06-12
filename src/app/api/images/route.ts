@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, getCurrentUser } from '@/lib/auth';
 import { listImages, uploadImage } from '@/lib/r2';
 import { analyzeImage } from '@/lib/vision';
 import { addImageMetadata, type ImageMetadata } from '@/lib/metadata';
@@ -8,10 +8,13 @@ export async function GET(request: NextRequest) {
   const authError = await requireAuth();
   if (authError) return authError;
 
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const folder = request.nextUrl.searchParams.get('folder') || undefined;
 
   try {
-    const images = await listImages(folder);
+    const images = await listImages(folder, user.id);
     return NextResponse.json({ images });
   } catch (error) {
     console.error('[images] List error:', error);
@@ -22,6 +25,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authError = await requireAuth();
   if (authError) return authError;
+
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
     const formData = await request.formData();
@@ -51,7 +57,7 @@ export async function POST(request: NextRequest) {
       }
 
       const buffer = Buffer.from(await file.arrayBuffer());
-      const key = await uploadImage(buffer, file.name, file.type, folder);
+      const key = await uploadImage(buffer, file.name, file.type, folder, user.id);
 
       const analysis = await analyzeImage(buffer, file.type);
 
