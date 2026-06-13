@@ -78,10 +78,16 @@ export async function uploadImage(
   folder: string = 'uncategorized',
   userId?: string
 ): Promise<string> {
+  if (!userId) throw new Error('userId is required for upload');
+
   const safe = filename.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9.\-_]/g, '');
-  const key = userId
-    ? `${userId}/${folder}/${Date.now()}-${safe}`
-    : `${folder}/${Date.now()}-${safe}`;
+  let key = `${userId}/${folder}/${Date.now()}-${safe}`;
+
+  // Safety guard: key must always start with user_ prefix
+  if (!key.startsWith('user_')) {
+    console.warn(`[r2] Fixed missing user_ prefix: ${key}`);
+    key = `user_${key}`;
+  }
 
   await r2.send(
     new PutObjectCommand({
