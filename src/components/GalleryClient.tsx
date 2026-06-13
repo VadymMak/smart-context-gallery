@@ -1821,19 +1821,32 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
             <div className="flex justify-between items-center mb-2">
               <span className="text-sm font-medium text-gray-800">
                 {uploadProgress.isUploading
-                  ? `Uploading… ${uploadProgress.completed}/${uploadProgress.total}`
+                  ? `Uploading file ${uploadProgress.completed + 1} of ${uploadProgress.total}`
                   : uploadProgress.failed.length > 0
-                  ? `Done — ${uploadProgress.failed.length} failed`
-                  : `All ${uploadProgress.total} image${uploadProgress.total !== 1 ? 's' : ''} uploaded!`}
+                  ? `Done — ${uploadProgress.failed.length} of ${uploadProgress.total} failed`
+                  : `${uploadProgress.total} file${uploadProgress.total !== 1 ? 's' : ''} uploaded`}
               </span>
-              {uploadProgress.isUploading && <span className="text-xs text-gray-400 truncate max-w-[180px] ml-4">{uploadProgress.current}</span>}
+              {uploadProgress.isUploading && (
+                <span className="text-xs text-gray-400 truncate max-w-[200px] ml-4" title={uploadProgress.current}>
+                  {uploadProgress.current}
+                </span>
+              )}
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-              <div className={`h-full rounded-full transition-all duration-300 ${uploadProgress.failed.length > 0 ? 'bg-amber-500' : 'bg-blue-600'}`} style={{ width: `${Math.round((uploadProgress.completed / uploadProgress.total) * 100)}%` }} />
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${uploadProgress.failed.length > 0 ? 'bg-amber-500' : 'bg-blue-600'}`}
+                style={{ width: `${Math.round(((uploadProgress.isUploading ? uploadProgress.completed : uploadProgress.total) / uploadProgress.total) * 100)}%` }}
+              />
             </div>
-            {uploadProgress.failed.length > 0 && <p className="text-xs text-red-500 mt-1.5">Failed: {uploadProgress.failed.join(', ')}</p>}
+            {uploadProgress.failed.length > 0 && (
+              <p className="text-xs text-red-500 mt-1.5 truncate" title={uploadProgress.failed.join(', ')}>
+                Failed: {uploadProgress.failed.join(', ')}
+              </p>
+            )}
             {!uploadProgress.isUploading && uploadProgress.failed.length === 0 && (
-              <div className="flex items-center gap-1.5 mt-1.5 text-green-600"><CheckIcon /><span className="text-sm font-medium">Complete!</span></div>
+              <div className="flex items-center gap-1.5 mt-1.5 text-green-600">
+                <CheckIcon /><span className="text-sm font-medium">Complete!</span>
+              </div>
             )}
           </div>
         </div>
