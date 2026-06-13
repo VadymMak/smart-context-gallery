@@ -1211,6 +1211,8 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
     if (!files.length) return;
     setUploadProgress({ total: files.length, completed: 0, current: files[0].file.name, failed: [], isUploading: true });
 
+    const failedNames: string[] = [];
+
     for (let i = 0; i < files.length; i++) {
       const { file, folder } = files[i];
       setUploadProgress((prev) => prev ? { ...prev, current: file.name, completed: i } : null);
@@ -1219,20 +1221,46 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
         formData.append('files', file);
         formData.append('folder', folder);
         const res = await fetch('/api/images', { method: 'POST', body: formData });
-        if (!res.ok) setUploadProgress((prev) => prev ? { ...prev, failed: [...prev.failed, file.name] } : null);
-      } catch {
+        if (!res.ok) {
+          let msg = `HTTP ${res.status}`;
+          try {
+            const body = await res.json();
+            if (body.error) msg = body.error;
+          } catch { /* ignore parse error */ }
+          console.error(`[upload] ${file.name}: ${msg}`);
+          failedNames.push(file.name);
+          setUploadProgress((prev) => prev ? { ...prev, failed: [...prev.failed, file.name] } : null);
+        }
+      } catch (err) {
+        console.error(`[upload] ${file.name}: network error`, err);
+        failedNames.push(file.name);
         setUploadProgress((prev) => prev ? { ...prev, failed: [...prev.failed, file.name] } : null);
       }
     }
 
     setUploadProgress((prev) => prev ? { ...prev, completed: files.length, isUploading: false } : null);
+
+    if (failedNames.length > 0) {
+      addToast(
+        `${failedNames.length} file${failedNames.length > 1 ? 's' : ''} failed to upload`,
+        'error'
+      );
+    } else {
+      addToast(
+        `${files.length} file${files.length > 1 ? 's' : ''} uploaded successfully`,
+        'success'
+      );
+    }
+
+    // Keep progress bar visible longer when there are failures
+    const delay = failedNames.length > 0 ? 5000 : 1500;
     setTimeout(async () => {
       setUploadProgress(null);
       await fetchImages();
       await fetchMetadata();
       await refreshFolders();
-    }, 1500);
-  }, [fetchImages, fetchMetadata, refreshFolders]);
+    }, delay);
+  }, [fetchImages, fetchMetadata, refreshFolders, addToast]);
 
   // ── Drag & drop ────────────────────────────────────────────────────────────
 

@@ -4,6 +4,8 @@ import { listImages, uploadImage } from '@/lib/r2';
 import { analyzeImage } from '@/lib/vision';
 import { addImageMetadata, type ImageMetadata } from '@/lib/metadata';
 
+export const maxDuration = 60;
+
 function getFileCategory(filename: string): string {
   const ext = filename.toLowerCase().split('.').pop() || '';
   const map: Record<string, string> = {
@@ -77,52 +79,75 @@ export async function POST(request: NextRequest) {
 
     const MAX_SIZE = 50 * 1024 * 1024; // 50MB
     const results: { key: string; filename: string; tags: string[]; description: string }[] = [];
+    const errors: { filename: string; error: string }[] = [];
 
     for (const file of files) {
       if (file.size > MAX_SIZE) {
-        return NextResponse.json(
-          { error: `File ${file.name} exceeds 50MB limit` },
-          { status: 400 }
-        );
+        errors.push({ filename: file.name, error: `Exceeds 50MB limit` });
+        continue;
       }
 
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const fileType = file.type || getMimeType(file.name);
-      const key = await uploadImage(buffer, file.name, fileType, folder, user.id);
+      try {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const fileType = file.type || getMimeType(file.name);
+        const key = await uploadImage(buffer, file.name, fileType, folder, user.id);
+        const category = getFileCategory(file.name);
+        const ext = file.name.toLowerCase().split('.').pop() || 'file';
 
-      const isImage = file.type.startsWith('image/');
-      let analysis = null;
-      if (isImage) {
-        analysis = await analyzeImage(buffer, file.type);
+        // Save basic metadata immediately — before vision, so file is never orphaned
+        const meta: ImageMetadata = {
+          key,
+          filename: file.name,
+          folder,
+          size: file.size,
+          uploadedAt: new Date().toISOString(),
+          description: '',
+          tags: [category, ext],
+          category,
+          style: '',
+          colors: [],
+          fileType,
+        };
+        await addImageMetadata(meta);
+
+        // Vision analysis is optional — failure must not orphan the file
+        const isImage = file.type.startsWith('image/');
+        if (isImage) {
+          try {
+            const analysis = await analyzeImage(buffer, file.type);
+            const enriched: ImageMetadata = {
+              ...meta,
+              description: analysis.description,
+              tags: analysis.tags,
+              category: analysis.category,
+              style: analysis.style,
+              colors: analysis.colors,
+            };
+            await addImageMetadata(enriched);
+            console.log(`[vision] ${file.name}: ${analysis.tags.join(', ')}`);
+            results.push({ key, filename: file.name, tags: analysis.tags, description: analysis.description });
+            continue;
+          } catch (visionError) {
+            console.error(`[vision] Failed for ${file.name} (user=${user.id}):`, visionError);
+            // File is already saved with basic metadata — continue without vision data
+          }
+        }
+
+        results.push({ key, filename: file.name, tags: meta.tags, description: '' });
+      } catch (fileError) {
+        console.error(`[images] Upload failed for ${file.name} (user=${user.id}):`, fileError);
+        errors.push({ filename: file.name, error: 'Upload failed' });
       }
-
-      const category = analysis?.category || getFileCategory(file.name);
-      const tags = analysis?.tags || [category, file.name.toLowerCase().split('.').pop() || 'file'];
-
-      const meta: ImageMetadata = {
-        key,
-        filename: file.name,
-        folder,
-        size: file.size,
-        uploadedAt: new Date().toISOString(),
-        description: analysis?.description || '',
-        tags,
-        category,
-        style: analysis?.style || '',
-        colors: analysis?.colors || [],
-        fileType,
-      };
-
-      await addImageMetadata(meta);
-
-      if (isImage && analysis) {
-        console.log(`[vision] ${file.name}: ${analysis.tags.join(', ')}`);
-      }
-
-      results.push({ key, filename: file.name, tags, description: meta.description });
     }
 
-    return NextResponse.json({ uploaded: results });
+    if (results.length === 0 && errors.length > 0) {
+      return NextResponse.json(
+        { error: `All uploads failed: ${errors.map((e) => e.filename).join(', ')}`, errors },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ uploaded: results, errors: errors.length > 0 ? errors : undefined });
   } catch (error) {
     console.error('[images] Upload error:', error);
     return NextResponse.json({ error: 'Failed to upload' }, { status: 500 });
