@@ -653,10 +653,10 @@ function FileCard({ file, meta, selectMode, selected, onToggleSelect, onDeleteRe
           {selected && <CheckIcon />}
         </div>
       ) : (
-        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
+        <div className="absolute top-2 right-2 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-200 z-10">
           <button
             onClick={(e) => { e.stopPropagation(); onShareRequest(file); }}
-            className="p-1.5 bg-white/90 hover:bg-blue-500 hover:text-white text-gray-700 rounded-full shadow-sm transition-colors"
+            className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 bg-white/90 hover:bg-blue-500 hover:text-white text-gray-700 rounded-full shadow-sm transition-colors"
             title="Share"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -666,7 +666,7 @@ function FileCard({ file, meta, selectMode, selected, onToggleSelect, onDeleteRe
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onDeleteRequest(file); }}
-            className="p-1.5 bg-white/90 hover:bg-red-500 hover:text-white text-gray-700 rounded-full shadow-sm transition-colors"
+            className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 bg-white/90 hover:bg-red-500 hover:text-white text-gray-700 rounded-full shadow-sm transition-colors"
             title="Delete"
           >
             <TrashIcon />
@@ -1363,6 +1363,8 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
     setSearchResults(null);
     setActiveProject(null);
     setLightboxIndex(null);
+    // Auto-close sidebar on mobile where it renders as a fixed overlay
+    if (window.innerWidth < 768) setSidebarOpen(false);
   };
 
   const handleCreateSubfolder = (parentPath: string) => {
@@ -1786,11 +1788,11 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
                             {new Date(file.lastModified).toLocaleDateString()}
                           </span>
                           {!selectMode && (
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                              <button onClick={(e) => { e.stopPropagation(); handleShareImage(file); }} className="p-1.5 hover:bg-blue-100 text-gray-500 hover:text-blue-600 rounded-lg transition-colors" title="Share">
+                            <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all shrink-0">
+                              <button onClick={(e) => { e.stopPropagation(); handleShareImage(file); }} className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 hover:bg-blue-100 text-gray-500 hover:text-blue-600 rounded-lg transition-colors" title="Share">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
                               </button>
-                              <button onClick={(e) => { e.stopPropagation(); requestDelete(file); }} className="p-1.5 hover:bg-red-100 text-gray-500 hover:text-red-600 rounded-lg transition-colors" title="Delete">
+                              <button onClick={(e) => { e.stopPropagation(); requestDelete(file); }} className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 hover:bg-red-100 text-gray-500 hover:text-red-600 rounded-lg transition-colors" title="Delete">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                               </button>
                             </div>
