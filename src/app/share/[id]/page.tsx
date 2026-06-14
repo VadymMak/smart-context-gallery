@@ -1,6 +1,8 @@
 import { getShareById, isShareExpired } from '@/lib/shares';
 import { ProtectedImageViewer } from '@/components/ProtectedImageViewer';
 import { ProtectedVideoPlayer } from '@/components/ProtectedVideoPlayer';
+import ProtectedPdfViewer from '@/components/ProtectedPdfViewer';
+import ProtectedDocViewer from '@/components/ProtectedDocViewer';
 import { notFound } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
@@ -34,6 +36,9 @@ export default async function SharePage({ params }: Props) {
   const isPreview = share.mode === 'preview';
   const isImage = share.fileType === 'image';
   const isVideo = share.fileType === 'video';
+  const lowerName = share.fileName.toLowerCase();
+  const isPdf = lowerName.endsWith('.pdf');
+  const isDocx = lowerName.endsWith('.docx');
   const watermarkText = `Shared by ${share.createdByName}`;
 
   return (
@@ -101,15 +106,33 @@ export default async function SharePage({ params }: Props) {
             />
           )}
 
-          {/* Preview mode — document: preview not supported, offer download anyway */}
-          {isPreview && !isImage && !isVideo && (
+          {/* Preview mode — PDF: canvas-based render via PDF.js */}
+          {isPreview && isPdf && (
+            <ProtectedPdfViewer
+              fileUrl={`/api/share/${id}/file`}
+              sharedBy={share.createdByName}
+              fileName={share.fileName}
+            />
+          )}
+
+          {/* Preview mode — DOCX: server-converted HTML */}
+          {isPreview && isDocx && (
+            <ProtectedDocViewer
+              shareId={id}
+              sharedBy={share.createdByName}
+              fileName={share.fileName}
+            />
+          )}
+
+          {/* Preview mode — unsupported document type */}
+          {isPreview && !isImage && !isVideo && !isPdf && !isDocx && (
             <div className="flex flex-col items-center gap-6 py-8">
-              <svg className="w-20 h-20 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <svg className="w-20 h-20 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/>
                 <polyline points="14 2 14 8 20 8"/>
               </svg>
               <p className="text-white/60 text-sm">{share.fileName}</p>
-              <p className="text-white/30 text-xs">This file type cannot be previewed in the browser</p>
+              <p className="text-white/30 text-xs">Preview is not available for this file type</p>
             </div>
           )}
 
@@ -156,10 +179,32 @@ export default async function SharePage({ params }: Props) {
             </>
           )}
 
-          {/* Download mode — document / PDF */}
-          {!isPreview && !isImage && !isVideo && (
+          {/* Download mode — PDF: embedded iframe preview + download button */}
+          {!isPreview && isPdf && (
+            <>
+              <iframe
+                src={`/api/share/${id}/file`}
+                className="w-full max-w-4xl rounded-xl border border-white/10 shadow-2xl"
+                style={{ height: '70vh' }}
+                title={share.fileName}
+              />
+              <a
+                href={`/api/share/${id}/file?download=1`}
+                download={share.fileName}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors shadow-lg"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+                </svg>
+                Download
+              </a>
+            </>
+          )}
+
+          {/* Download mode — other documents: file icon + download button */}
+          {!isPreview && !isImage && !isVideo && !isPdf && (
             <div className="flex flex-col items-center gap-6 py-8">
-              <svg className="w-20 h-20 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <svg className="w-20 h-20 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/>
                 <polyline points="14 2 14 8 20 8"/>
               </svg>

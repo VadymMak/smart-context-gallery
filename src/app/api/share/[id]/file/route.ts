@@ -23,24 +23,26 @@ export async function GET(
   }
 
   const stream = body.transformToWebStream();
+  const isPdf = share.fileName.toLowerCase().endsWith('.pdf');
   const headers: Record<string, string> = {
-    'Content-Type': response.ContentType || 'application/octet-stream',
+    'Content-Type': isPdf ? 'application/pdf' : (response.ContentType || 'application/octet-stream'),
     'X-Content-Type-Options': 'nosniff',
   };
   if (response.ContentLength) {
     headers['Content-Length'] = String(response.ContentLength);
   }
 
-  if (share.mode === 'download' && isDownloadAction) {
-    // Trigger real browser download — Content-Disposition: attachment
+  if (isDownloadAction) {
     headers['Content-Disposition'] = `attachment; filename="${share.fileName}"`;
     headers['Cache-Control'] = 'private, max-age=3600';
   } else if (share.mode === 'preview') {
     // Never cache preview — R2 URL must stay hidden
+    headers['Content-Disposition'] = 'inline';
     headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0';
     headers['Pragma'] = 'no-cache';
   } else {
-    // Download mode, image/video display (not download click)
+    // Download mode, display (not download click) — e.g. PDF iframe or img/video tag
+    headers['Content-Disposition'] = 'inline';
     headers['Cache-Control'] = 'private, max-age=3600';
   }
 
