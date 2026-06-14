@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, getCurrentUser } from '@/lib/auth';
-import { createShare, getUserShares, revokeShare } from '@/lib/shares';
+import { createShare, getUserShares, deleteShare } from '@/lib/shares';
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://smart-context.dev';
+function getOrigin(request: NextRequest): string {
+  const origin = request.headers.get('origin');
+  if (origin) return origin;
+  const host = request.headers.get('host') || 'smart-context.dev';
+  const proto = host.includes('localhost') ? 'http' : 'https';
+  return `${proto}://${host}`;
+}
 
 export async function GET() {
   const authError = await requireAuth();
@@ -20,22 +26,39 @@ export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { type, target, expiresInDays, label } = await request.json();
+  const { fileKey, mode, expiresAt } = await request.json();
 
-  if (!type || !target) {
-    return NextResponse.json({ error: 'Missing type or target' }, { status: 400 });
+  if (!fileKey || !mode) {
+    return NextResponse.json({ error: 'Missing fileKey or mode' }, { status: 400 });
   }
 
-  if (type === 'image' && !target.startsWith(`${user.id}/`)) {
+  if (mode !== 'download' && mode !== 'preview') {
+    return NextResponse.json({ error: 'mode must be "download" or "preview"' }, { status: 400 });
+  }
+
+  // Security: fileKey must belong to current user
+  if (!fileKey.startsWith(`${user.id}/`)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const share = await createShare(type, target, user.id, user.displayName, {
-    expiresInDays: expiresInDays || 7,
-    label,
+  const fileName = fileKey.split('/').pop() || fileKey;
+  const ext = fileName.toLowerCase().split('.').pop() || '';
+  const videoExts = new Set(['mp4', 'mov', 'avi', 'mkv', 'webm']);
+  const fileType = videoExts.has(ext) ? 'video' : 'image';
+
+  const share = await createShare({
+    fileKey,
+    fileName,
+    fileType,
+    mode,
+    createdBy: user.id,
+    createdByName: user.displayName,
+    createdAt: new Date().toISOString(),
+    expiresAt: expiresAt || undefined,
+    watermarkText: `Shared by ${user.displayName}`,
   });
 
-  const url = `${BASE_URL}/share/${share.token}`;
+  const url = `${getOrigin(request)}/share/${share.id}`;
   return NextResponse.json({ share, url });
 }
 
@@ -45,11 +68,9 @@ export async function DELETE(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const token = request.nextUrl.searchParams.get('token');
-  if (!token) return NextResponse.json({ error: 'Missing token' }, { status: 400 });
+  const id = request.nextUrl.searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
-  const revoked = await revokeShare(token, user.id);
-  if (!revoked) return NextResponse.json({ error: 'Share not found' }, { status: 404 });
-
-  return NextResponse.json({ revoked: true });
+  await deleteShare(id, user.id);
+  return NextResponse.json({ deleted: true });
 }
