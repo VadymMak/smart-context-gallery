@@ -125,6 +125,14 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function toTimestamp(value: Date | string | number | undefined | null): number {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'number') return value;
+  const parsed = new Date(value as string).getTime();
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 function sortImages(
   images: GalleryImage[],
   sort: SortOption,
@@ -132,11 +140,11 @@ function sortImages(
 ): GalleryImage[] {
   return [...images].sort((a, b) => {
     switch (sort) {
-      case 'oldest': return a.lastModified.getTime() - b.lastModified.getTime();
+      case 'oldest': return toTimestamp(a.lastModified) - toTimestamp(b.lastModified);
       case 'name-asc': return a.filename.localeCompare(b.filename);
       case 'category': return (meta[a.key]?.category || 'z').localeCompare(meta[b.key]?.category || 'z');
       case 'style': return (meta[a.key]?.style || 'z').localeCompare(meta[b.key]?.style || 'z');
-      default: return b.lastModified.getTime() - a.lastModified.getTime();
+      default: return toTimestamp(b.lastModified) - toTimestamp(a.lastModified);
     }
   });
 }

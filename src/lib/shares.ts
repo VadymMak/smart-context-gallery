@@ -6,7 +6,7 @@ export interface Share {
   id: string;
   fileKey: string;
   fileName: string;
-  fileType: 'image' | 'video';
+  fileType: 'image' | 'video' | 'document';
   mode: 'download' | 'preview';
   createdBy: string;
   createdByName: string;

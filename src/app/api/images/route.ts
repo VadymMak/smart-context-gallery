@@ -111,7 +111,8 @@ export async function POST(request: NextRequest) {
         await addImageMetadata(meta);
 
         // Vision analysis is optional — failure must not orphan the file
-        const isImage = file.type.startsWith('image/');
+        // Use computed fileType (with MIME fallback) not raw file.type which can be empty
+        const isImage = fileType.startsWith('image/');
         if (isImage) {
           try {
             const analysis = await analyzeImage(buffer, file.type);

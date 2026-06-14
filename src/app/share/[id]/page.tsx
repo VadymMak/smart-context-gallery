@@ -33,6 +33,7 @@ export default async function SharePage({ params }: Props) {
 
   const isPreview = share.mode === 'preview';
   const isImage = share.fileType === 'image';
+  const isVideo = share.fileType === 'video';
   const watermarkText = `Shared by ${share.createdByName}`;
 
   return (
@@ -84,7 +85,7 @@ export default async function SharePage({ params }: Props) {
             )}
           </div>
 
-          {/* Preview mode */}
+          {/* Preview mode — image */}
           {isPreview && isImage && (
             <ProtectedImageViewer
               shareId={id}
@@ -92,14 +93,27 @@ export default async function SharePage({ params }: Props) {
             />
           )}
 
-          {isPreview && !isImage && (
+          {/* Preview mode — video */}
+          {isPreview && isVideo && (
             <ProtectedVideoPlayer
               shareId={id}
               watermarkText={watermarkText}
             />
           )}
 
-          {/* Download mode */}
+          {/* Preview mode — document: preview not supported, offer download anyway */}
+          {isPreview && !isImage && !isVideo && (
+            <div className="flex flex-col items-center gap-6 py-8">
+              <svg className="w-20 h-20 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <p className="text-white/60 text-sm">{share.fileName}</p>
+              <p className="text-white/30 text-xs">This file type cannot be previewed in the browser</p>
+            </div>
+          )}
+
+          {/* Download mode — image */}
           {!isPreview && isImage && (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -121,7 +135,8 @@ export default async function SharePage({ params }: Props) {
             </>
           )}
 
-          {!isPreview && !isImage && (
+          {/* Download mode — video */}
+          {!isPreview && isVideo && (
             <>
               <video
                 src={`/api/share/${id}/file`}
@@ -139,6 +154,27 @@ export default async function SharePage({ params }: Props) {
                 Download
               </a>
             </>
+          )}
+
+          {/* Download mode — document / PDF */}
+          {!isPreview && !isImage && !isVideo && (
+            <div className="flex flex-col items-center gap-6 py-8">
+              <svg className="w-20 h-20 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <p className="text-white/70 text-sm font-medium">{share.fileName}</p>
+              <a
+                href={`/api/share/${id}/file?download=1`}
+                download={share.fileName}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors shadow-lg"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+                </svg>
+                Download {share.fileName}
+              </a>
+            </div>
           )}
         </div>
       </main>

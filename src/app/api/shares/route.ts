@@ -44,7 +44,8 @@ export async function POST(request: NextRequest) {
   const fileName = fileKey.split('/').pop() || fileKey;
   const ext = fileName.toLowerCase().split('.').pop() || '';
   const videoExts = new Set(['mp4', 'mov', 'avi', 'mkv', 'webm']);
-  const fileType = videoExts.has(ext) ? 'video' : 'image';
+  const imageExts = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'heic', 'avif']);
+  const fileType = videoExts.has(ext) ? 'video' : imageExts.has(ext) ? 'image' : 'document';
 
   const share = await createShare({
     fileKey,

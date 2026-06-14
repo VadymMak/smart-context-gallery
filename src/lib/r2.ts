@@ -16,9 +16,17 @@ export interface GalleryImage {
   key: string;
   url: string;
   size: number;
-  lastModified: Date;
+  lastModified: Date | string | number;
   folder: string;
   filename: string;
+}
+
+function toTimestamp(value: Date | string | number | undefined | null): number {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'number') return value;
+  const parsed = new Date(value).getTime();
+  return isNaN(parsed) ? 0 : parsed;
 }
 
 export async function listImages(folder?: string, userId?: string): Promise<GalleryImage[]> {
@@ -68,7 +76,7 @@ export async function listImages(folder?: string, userId?: string): Promise<Gall
       })
   );
 
-  return images.sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
+  return images.sort((a, b) => toTimestamp(b.lastModified) - toTimestamp(a.lastModified));
 }
 
 export async function uploadImage(
