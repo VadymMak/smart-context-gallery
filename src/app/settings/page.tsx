@@ -145,7 +145,7 @@ export default function SettingsPage() {
                         {user.role}
                       </span>
                     </div>
-                    <p className="text-gray-500 text-xs mt-0.5">@{user.username} · joined {new Date(user.createdAt).toLocaleDateString()}</p>
+                    <p className="text-gray-500 text-xs mt-0.5" suppressHydrationWarning>@{user.username} · joined {new Date(user.createdAt).toLocaleDateString()}</p>
                   </div>
                   {user.role !== 'admin' && (
                     <button

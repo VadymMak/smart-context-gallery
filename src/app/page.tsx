@@ -2,7 +2,7 @@ import { isAuthenticated, getCurrentUser } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { listImages, listAllFolderPaths } from '@/lib/r2';
 import { loadMetadata } from '@/lib/metadata';
-import { GalleryClient } from '@/components/GalleryClient';
+import { GalleryClientLoader } from '@/components/GalleryClientLoader';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +33,7 @@ export default async function HomePage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <GalleryClient
+      <GalleryClientLoader
         initialImages={images}
         initialFolders={folders}
         initialMetadata={userMetadata}
