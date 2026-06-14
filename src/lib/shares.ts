@@ -1,111 +1,121 @@
 import { r2, BUCKET } from '@/lib/r2';
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
-import crypto from 'crypto';
+import { nanoid } from 'nanoid';
 
-export interface ShareEntry {
-  token: string;
-  type: 'image' | 'folder' | 'archive';
-  target: string;
-  userId: string;
-  userName: string;
+export interface Share {
+  id: string;
+  fileKey: string;
+  fileName: string;
+  fileType: 'image' | 'video';
+  mode: 'download' | 'preview';
+  createdBy: string;
+  createdByName: string;
   createdAt: string;
-  expiresAt: string;
-  accessCount: number;
-  isActive: boolean;
-  label?: string;
+  expiresAt?: string;
+  viewCount: number;
+  watermarkText?: string;
 }
 
-interface ShareStore {
-  shares: ShareEntry[];
+interface SharesData {
+  shares: Record<string, Share>;
 }
 
 const SHARES_KEY = '_shares.json';
 
-export async function loadShares(): Promise<ShareStore> {
+const MAX_RETRIES = 3;
+const jitter = () => new Promise<void>((r) => setTimeout(r, 40 + Math.random() * 80));
+
+async function loadSharesData(): Promise<SharesData> {
   try {
     const command = new GetObjectCommand({ Bucket: BUCKET, Key: SHARES_KEY });
     const response = await r2.send(command);
     const body = await response.Body?.transformToString();
-    if (!body) return { shares: [] };
-    return JSON.parse(body);
+    if (!body) return { shares: {} };
+    const parsed = JSON.parse(body);
+    // Handle legacy array format gracefully
+    if (Array.isArray(parsed?.shares)) return { shares: {} };
+    return parsed as SharesData;
   } catch (error: unknown) {
     const err = error as { name?: string; $metadata?: { httpStatusCode?: number } };
     if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
-      return { shares: [] };
+      return { shares: {} };
     }
     throw error;
   }
 }
 
-export async function saveShares(store: ShareStore): Promise<void> {
+async function saveSharesData(data: SharesData): Promise<void> {
   await r2.send(new PutObjectCommand({
     Bucket: BUCKET,
     Key: SHARES_KEY,
-    Body: JSON.stringify(store, null, 2),
+    Body: JSON.stringify(data, null, 2),
     ContentType: 'application/json',
   }));
 }
 
-function generateToken(): string {
-  return crypto.randomBytes(16).toString('base64url');
+export async function getShares(): Promise<SharesData> {
+  return loadSharesData();
 }
 
 export async function createShare(
-  type: 'image' | 'folder' | 'archive',
-  target: string,
-  userId: string,
-  userName: string,
-  options?: { expiresInDays?: number; label?: string }
-): Promise<ShareEntry> {
-  const store = await loadShares();
-  const expiresInDays = options?.expiresInDays ?? 7;
-  const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
-
-  const entry: ShareEntry = {
-    token: generateToken(),
-    type,
-    target,
-    userId,
-    userName,
-    createdAt: new Date().toISOString(),
-    expiresAt,
-    accessCount: 0,
-    isActive: true,
-    label: options?.label,
+  share: Omit<Share, 'id' | 'viewCount'>
+): Promise<Share> {
+  const newShare: Share = {
+    ...share,
+    id: nanoid(12),
+    viewCount: 0,
   };
 
-  store.shares.push(entry);
-  await saveShares(store);
-  return entry;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const data = await loadSharesData();
+    data.shares[newShare.id] = newShare;
+    await saveSharesData(data);
+
+    if (attempt < MAX_RETRIES - 1) {
+      await jitter();
+      const verify = await loadSharesData();
+      if (verify.shares[newShare.id]) return newShare;
+      console.warn(`[shares] Write conflict (attempt ${attempt + 1}/${MAX_RETRIES}), retrying…`);
+    }
+  }
+
+  return newShare;
 }
 
-export async function getShare(token: string): Promise<ShareEntry | null> {
-  const store = await loadShares();
-  const share = store.shares.find((s) => s.token === token);
-  if (!share || !share.isActive) return null;
-  if (new Date(share.expiresAt) < new Date()) return null;
-  return share;
+export async function deleteShare(shareId: string, userId: string): Promise<void> {
+  const data = await loadSharesData();
+  const share = data.shares[shareId];
+  if (!share || share.createdBy !== userId) return;
+  delete data.shares[shareId];
+  await saveSharesData(data);
 }
 
-export async function incrementAccessCount(token: string): Promise<void> {
-  const store = await loadShares();
-  const share = store.shares.find((s) => s.token === token);
-  if (share) {
-    share.accessCount++;
-    await saveShares(store);
+export async function getShareById(shareId: string): Promise<Share | null> {
+  const data = await loadSharesData();
+  return data.shares[shareId] ?? null;
+}
+
+export async function incrementViewCount(shareId: string): Promise<void> {
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const data = await loadSharesData();
+    if (!data.shares[shareId]) return;
+    data.shares[shareId].viewCount++;
+    await saveSharesData(data);
+
+    if (attempt < MAX_RETRIES - 1) {
+      await jitter();
+      const verify = await loadSharesData();
+      if (verify.shares[shareId]) return;
+    }
   }
 }
 
-export async function revokeShare(token: string, userId: string): Promise<boolean> {
-  const store = await loadShares();
-  const share = store.shares.find((s) => s.token === token && s.userId === userId);
-  if (!share) return false;
-  share.isActive = false;
-  await saveShares(store);
-  return true;
+export async function getUserShares(userId: string): Promise<Share[]> {
+  const data = await loadSharesData();
+  return Object.values(data.shares).filter((s) => s.createdBy === userId);
 }
 
-export async function getUserShares(userId: string): Promise<ShareEntry[]> {
-  const store = await loadShares();
-  return store.shares.filter((s) => s.userId === userId && s.isActive);
+export function isShareExpired(share: Share): boolean {
+  if (!share.expiresAt) return false;
+  return new Date(share.expiresAt) < new Date();
 }
