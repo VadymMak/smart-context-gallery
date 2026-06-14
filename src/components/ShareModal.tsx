@@ -11,7 +11,7 @@ interface Props {
 type ShareMode = 'download' | 'preview';
 
 export function ShareModal({ file, onClose }: Props) {
-  const [mode, setMode] = useState<ShareMode>('download');
+  const [mode, setMode] = useState<ShareMode>('preview');
   const [shareUrl, setShareUrl] = useState('');
   const [creating, setCreating] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -45,8 +45,6 @@ export function ShareModal({ file, onClose }: Props) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const fileName = file.filename;
-
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]"
@@ -56,44 +54,53 @@ export function ShareModal({ file, onClose }: Props) {
         className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-lg font-semibold mb-1">Share &quot;{fileName}&quot;</h3>
+        <h3 className="text-lg font-semibold mb-1">Share &quot;{file.filename}&quot;</h3>
         <p className="text-xs text-gray-400 mb-5">Choose how recipients can access this file</p>
 
-        {/* Mode selector */}
-        <div className="space-y-3 mb-5">
-          <label
-            className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${mode === 'download' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
-          >
-            <input
-              type="radio"
-              name="mode"
-              value="download"
-              checked={mode === 'download'}
-              onChange={() => { setMode('download'); setShareUrl(''); }}
-              className="mt-0.5 accent-blue-600"
-            />
-            <div>
-              <p className="text-sm font-medium text-gray-800">Download link</p>
-              <p className="text-xs text-gray-500 mt-0.5">Anyone with the link can download the original file</p>
-            </div>
-          </label>
+        {/* Mode selector — button cards */}
+        <div className="space-y-2 mb-5">
+          <p className="text-sm font-medium text-gray-700">Sharing mode</p>
 
-          <label
-            className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${mode === 'preview' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+          <button
+            onClick={() => { setMode('download'); setShareUrl(''); }}
+            className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-colors ${
+              mode === 'download' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+            }`}
           >
-            <input
-              type="radio"
-              name="mode"
-              value="preview"
-              checked={mode === 'preview'}
-              onChange={() => { setMode('preview'); setShareUrl(''); }}
-              className="mt-0.5 accent-blue-600"
-            />
+            <svg className="w-5 h-5 shrink-0 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+            </svg>
             <div>
-              <p className="text-sm font-medium text-gray-800">Preview only</p>
-              <p className="text-xs text-gray-500 mt-0.5">View in browser with watermark, download disabled</p>
+              <div className="font-medium text-sm text-gray-800">Download link</div>
+              <div className="text-xs text-gray-500">Anyone can view and download the original file</div>
             </div>
-          </label>
+            {mode === 'download' && (
+              <svg className="w-4 h-4 shrink-0 ml-auto text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            )}
+          </button>
+
+          <button
+            onClick={() => { setMode('preview'); setShareUrl(''); }}
+            className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-colors ${
+              mode === 'preview' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <svg className="w-5 h-5 shrink-0 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            <div>
+              <div className="font-medium text-sm text-gray-800">Preview only</div>
+              <div className="text-xs text-gray-500">View in browser with watermark, download blocked</div>
+            </div>
+            {mode === 'preview' && (
+              <svg className="w-4 h-4 shrink-0 ml-auto text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            )}
+          </button>
         </div>
 
         {/* Generated URL */}
@@ -108,18 +115,18 @@ export function ShareModal({ file, onClose }: Props) {
               />
               <button
                 onClick={handleCopy}
-                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 shrink-0 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 shrink-0 transition-colors"
               >
                 {copied ? (
                   <>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12"/>
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <polyline points="20 6 9 17 4 12" />
                     </svg>
                     Copied!
                   </>
                 ) : (
                   <>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                     </svg>

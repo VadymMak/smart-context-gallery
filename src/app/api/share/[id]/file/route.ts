@@ -18,38 +18,28 @@ export async function GET(
   const command = new GetObjectCommand({ Bucket: BUCKET, Key: share.fileKey });
 
   if (share.mode === 'download') {
-    // Generate 1-hour signed URL and redirect to it
+    // Download mode: redirect to 1-hour signed URL — fast, offloads bandwidth to R2
     const signedUrl = await getSignedUrl(r2, command, { expiresIn: 3600 });
-    return NextResponse.redirect(signedUrl, {
-      headers: {
-        'Content-Disposition': `attachment; filename="${encodeURIComponent(share.fileName)}"`,
-      },
-    });
+    return NextResponse.redirect(signedUrl);
   }
 
-  // preview mode
-  if (share.fileType === 'video') {
-    // Videos can't be efficiently proxied — return a short-lived signed URL
-    const signedUrl = await getSignedUrl(r2, command, { expiresIn: 300 });
-    return NextResponse.json({ url: signedUrl });
-  }
-
-  // Images: proxy through server so R2 URL is never exposed to client
+  // Preview mode — stream bytes through server so R2 URL is NEVER exposed to client
   const response = await r2.send(command);
   const body = response.Body;
   if (!body) {
     return NextResponse.json({ error: 'File not found' }, { status: 404 });
   }
 
-  const bytes = await body.transformToByteArray();
-  const contentType = response.ContentType || 'application/octet-stream';
+  // Use web ReadableStream — memory-efficient, no full buffer in RAM
+  const stream = body.transformToWebStream();
 
-  return new NextResponse(Buffer.from(bytes), {
+  return new NextResponse(stream, {
     headers: {
-      'Content-Type': contentType,
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      'Content-Type': response.ContentType || 'application/octet-stream',
+      ...(response.ContentLength ? { 'Content-Length': String(response.ContentLength) } : {}),
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'Pragma': 'no-cache',
       'X-Content-Type-Options': 'nosniff',
-      'Content-Disposition': 'inline',
     },
   });
 }

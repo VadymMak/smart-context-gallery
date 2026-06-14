@@ -5,32 +5,13 @@ import { useEffect, useRef, useState } from 'react';
 interface Props {
   shareId: string;
   watermarkText: string;
-  fileName: string;
 }
 
-const WATERMARK_SVG = (text: string) => {
-  const encoded = encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="100">
-      <text x="10" y="60" font-family="sans-serif" font-size="20" fill="rgba(0,0,0,0.15)" transform="rotate(-20, 200, 50)">${text}</text>
-    </svg>`
-  );
-  return `url("data:image/svg+xml,${encoded}")`;
-};
-
-export function ProtectedVideoPlayer({ shareId, watermarkText, fileName }: Props) {
+export function ProtectedVideoPlayer({ shareId, watermarkText }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [blurred, setBlurred] = useState(false);
-  const [videoSrc, setVideoSrc] = useState('');
 
-  // Fetch short-lived signed URL for video
-  useEffect(() => {
-    fetch(`/api/share/${shareId}/file`)
-      .then((res) => res.json())
-      .then((data) => { if (data.url) setVideoSrc(data.url); })
-      .catch(() => {});
-  }, [shareId]);
-
-  // Blur on focus loss
+  // Blur on focus loss / tab switch
   useEffect(() => {
     const handleVisibilityChange = () => { if (document.hidden) setBlurred(true); };
     const handleBlur = () => setBlurred(true);
@@ -46,14 +27,12 @@ export function ProtectedVideoPlayer({ shareId, watermarkText, fileName }: Props
     };
   }, []);
 
-  // Block keyboard shortcuts
+  // Block save/print shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
-        (e.ctrlKey && e.key === 's') ||
-        (e.metaKey && e.key === 's') ||
-        (e.ctrlKey && e.key === 'p') ||
-        (e.metaKey && e.key === 'p') ||
+        (e.ctrlKey && (e.key === 's' || e.key === 'p')) ||
+        (e.metaKey && (e.key === 's' || e.key === 'p')) ||
         e.key === 'PrintScreen'
       ) {
         e.preventDefault();
@@ -65,51 +44,61 @@ export function ProtectedVideoPlayer({ shareId, watermarkText, fileName }: Props
 
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
+    // Bottom 44px is typically the native video controls area
     const isControlsArea = e.clientY > rect.bottom - 44;
     if (!isControlsArea && videoRef.current) {
       videoRef.current.paused ? videoRef.current.play() : videoRef.current.pause();
     }
   };
 
-  if (!videoSrc) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
-      </div>
-    );
-  }
-
   return (
     <div
-      className="relative select-none"
+      className="relative select-none w-full max-w-4xl"
       onContextMenu={(e) => e.preventDefault()}
+      style={{ WebkitUserSelect: 'none' } as React.CSSProperties}
     >
-      {/* Native video element */}
+      {/* Video element */}
       <video
         ref={videoRef}
-        src={videoSrc}
+        src={`/api/share/${shareId}/file`}
         controls
         controlsList="nodownload noplaybackrate"
         disablePictureInPicture
         playsInline
-        className="w-full max-h-[80vh] rounded-xl shadow-2xl"
+        className="w-full max-h-[70vh] rounded-xl shadow-2xl"
         onContextMenu={(e) => e.preventDefault()}
-        aria-label={fileName}
       />
 
-      {/* Repeating watermark overlay */}
-      <div
-        className="absolute inset-0 pointer-events-none select-none rounded-xl overflow-hidden"
-        style={{
-          backgroundImage: WATERMARK_SVG(watermarkText),
-          backgroundRepeat: 'repeat',
-          transform: 'rotate(-15deg) scale(1.5)',
-          transformOrigin: 'center',
-          zIndex: 10,
-        }}
-      />
+      {/* SVG pattern watermark overlay — rendered directly over video */}
+      <div className="absolute inset-0 pointer-events-none select-none z-10 rounded-xl overflow-hidden">
+        <svg
+          className="w-full h-full opacity-[0.06]"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <defs>
+            <pattern
+              id="wm"
+              patternUnits="userSpaceOnUse"
+              width="250"
+              height="80"
+              patternTransform="rotate(-30)"
+            >
+              <text
+                x="10"
+                y="40"
+                fill="white"
+                fontSize="16"
+                fontFamily="sans-serif"
+              >
+                {watermarkText}
+              </text>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#wm)" />
+        </svg>
+      </div>
 
-      {/* Transparent click interceptor — blocks right-click, passes play/pause */}
+      {/* Transparent click interceptor — blocks right-click, passes play/pause to video controls */}
       <div
         className="absolute inset-0 rounded-xl"
         style={{ zIndex: 20, pointerEvents: 'auto' }}
@@ -120,11 +109,11 @@ export function ProtectedVideoPlayer({ shareId, watermarkText, fileName }: Props
       {/* Blur overlay on focus loss */}
       {blurred && (
         <div
-          className="absolute inset-0 backdrop-blur-xl bg-white/50 flex items-center justify-center rounded-xl cursor-pointer"
+          className="absolute inset-0 backdrop-blur-2xl bg-black/50 flex items-center justify-center rounded-xl cursor-pointer"
           style={{ zIndex: 30 }}
           onClick={() => setBlurred(false)}
         >
-          <p className="text-gray-600 text-base font-medium">Click to continue</p>
+          <p className="text-white/90 text-lg font-medium">Click to continue</p>
         </div>
       )}
     </div>
