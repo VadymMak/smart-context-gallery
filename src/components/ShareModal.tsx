@@ -41,32 +41,28 @@ export function ShareModal({ file, onClose }: Props) {
 
   const copyToClipboard = async (text: string) => {
     try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-        return;
-      }
-      // Fallback for mobile Safari and non-secure contexts
-      const textArea = document.createElement('textarea');
-      textArea.value = text;
-      textArea.style.position = 'fixed';
-      textArea.style.left = '-9999px';
-      textArea.style.top = '-9999px';
-      textArea.style.opacity = '0';
-      document.body.appendChild(textArea);
-      textArea.focus();
-      textArea.select();
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for very old browsers
       try {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        textArea.style.top = '-9999px';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
         document.execCommand('copy');
+        document.body.removeChild(textArea);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       } catch {
-        window.prompt('Copy this link:', text);
+        window.prompt('Copy this link manually:', text);
       }
-      document.body.removeChild(textArea);
-    } catch {
-      window.prompt('Copy this link:', text);
     }
   };
 
