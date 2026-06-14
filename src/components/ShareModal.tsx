@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { GalleryImage } from '@/lib/r2';
 
 interface Props {
@@ -16,6 +16,7 @@ export function ShareModal({ file, onClose }: Props) {
   const [creating, setCreating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
+  const urlInputRef = useRef<HTMLInputElement>(null);
 
   const handleCreate = async () => {
     setCreating(true);
@@ -32,6 +33,7 @@ export function ShareModal({ file, onClose }: Props) {
         return;
       }
       setShareUrl(data.url);
+      setTimeout(() => urlInputRef.current?.select(), 100);
     } catch {
       setError('Network error');
     } finally {
@@ -45,24 +47,8 @@ export function ShareModal({ file, onClose }: Props) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback for very old browsers
-      try {
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-9999px';
-        textArea.style.top = '-9999px';
-        textArea.style.opacity = '0';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      } catch {
-        window.prompt('Copy this link manually:', text);
-      }
+      // Clipboard API failed — select the input so the user can Cmd+C
+      urlInputRef.current?.select();
     }
   };
 
@@ -129,10 +115,12 @@ export function ShareModal({ file, onClose }: Props) {
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-5">
             <div className="flex items-center gap-2">
               <input
+                ref={urlInputRef}
                 type="text"
                 value={shareUrl}
                 readOnly
-                className="flex-1 bg-transparent text-sm text-gray-700 outline-none min-w-0 truncate"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+                className="flex-1 bg-transparent text-sm text-gray-700 outline-none min-w-0 cursor-text select-all"
               />
               <button
                 onClick={() => copyToClipboard(shareUrl)}
@@ -155,6 +143,7 @@ export function ShareModal({ file, onClose }: Props) {
                 )}
               </button>
             </div>
+          <p className="text-xs text-gray-400 mt-1.5 px-1">Click the URL to select it, then Cmd+C to copy</p>
           </div>
         )}
 
