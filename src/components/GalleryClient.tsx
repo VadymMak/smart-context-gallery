@@ -797,7 +797,7 @@ function Lightbox({ images, index, meta, onClose, onPrev, onNext, projects, allF
                   <p className="text-white/70"><span className="text-white/40">Folder:</span> {imgFolderPath || 'root'}</p>
                   {imgMeta.project && <p className="text-white/70"><span className="text-white/40">Project:</span> {imgMeta.project}</p>}
                   <p className="text-white/70"><span className="text-white/40">Size:</span> {formatBytes(imgMeta.size)}</p>
-                  <p className="text-white/70"><span className="text-white/40">Uploaded:</span> {new Date(imgMeta.uploadedAt).toLocaleDateString()}</p>
+                  <p className="text-white/70" suppressHydrationWarning><span className="text-white/40">Uploaded:</span> {new Date(imgMeta.uploadedAt).toLocaleDateString()}</p>
                 </div>
               </div>
               <div>
@@ -1834,7 +1834,7 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
                             <p className="text-sm font-medium text-gray-800 truncate" title={displayName(file.filename)}>{displayName(file.filename)}</p>
                             <p className="text-xs text-gray-400">{file.folder} · {formatBytes(file.size)}</p>
                           </div>
-                          <span className="text-xs text-gray-400 shrink-0 hidden sm:block">
+                          <span className="text-xs text-gray-400 shrink-0 hidden sm:block" suppressHydrationWarning>
                             {new Date(file.lastModified).toLocaleDateString()}
                           </span>
                           {!selectMode && (
