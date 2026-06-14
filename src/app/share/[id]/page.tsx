@@ -109,7 +109,7 @@ export default async function SharePage({ params }: Props) {
                 className="max-w-full max-h-[70vh] rounded-xl shadow-2xl object-contain"
               />
               <a
-                href={`/api/share/${id}/file`}
+                href={`/api/share/${id}/file?download=1`}
                 download={share.fileName}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors shadow-lg"
               >
@@ -129,7 +129,7 @@ export default async function SharePage({ params }: Props) {
                 className="max-w-full max-h-[70vh] rounded-xl shadow-2xl"
               />
               <a
-                href={`/api/share/${id}/file`}
+                href={`/api/share/${id}/file?download=1`}
                 download={share.fileName}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors shadow-lg"
               >
