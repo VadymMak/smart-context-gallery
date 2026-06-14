@@ -1856,56 +1856,63 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
                 const imgFiles = activeFiles.filter(f => isImageFile(f.filename));
                 const docFiles = activeFiles.filter(f => !isImageFile(f.filename));
                 return (
-                  <div className="space-y-4">
-                    {docFiles.length > 0 && (
-                      <div className="space-y-0.5">
-                        {docFiles.map((file) => {
-                          const { color } = getFileKind(file.filename);
-                          const ext = file.filename.split('.').pop() || '';
-                          return (
-                            <div
-                              key={file.key}
-                              className={`flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 rounded-xl cursor-pointer group transition-colors ${selectedKeys.has(file.key) && selectMode ? 'bg-blue-50' : ''}`}
-                              onClick={() => selectMode ? toggleSelect(file.key) : handleFileClick(file)}
-                            >
-                              {selectMode && (
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${selectedKeys.has(file.key) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
-                                  {selectedKeys.has(file.key) && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                  <>
+                    {/* MOBILE (< md): doc rows above image 2-col grid */}
+                    <div className="md:hidden space-y-4">
+                      {docFiles.length > 0 && (
+                        <div className="space-y-0.5">
+                          {docFiles.map((file) => {
+                            const { color } = getFileKind(file.filename);
+                            const ext = file.filename.split('.').pop() || '';
+                            return (
+                              <div
+                                key={file.key}
+                                className={`flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 rounded-xl cursor-pointer group transition-colors ${selectedKeys.has(file.key) && selectMode ? 'bg-blue-50' : ''}`}
+                                onClick={() => selectMode ? toggleSelect(file.key) : handleFileClick(file)}
+                              >
+                                {selectMode && (
+                                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${selectedKeys.has(file.key) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
+                                    {selectedKeys.has(file.key) && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                                  </div>
+                                )}
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
+                                  <FileTypeIcon ext={ext} />
                                 </div>
-                              )}
-                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
-                                <FileTypeIcon ext={ext} />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-800 truncate" title={displayName(file.filename)}>{displayName(file.filename)}</p>
-                                <p className="text-xs text-gray-400">{file.folder} · {formatBytes(file.size)}</p>
-                              </div>
-                              <span className="text-xs text-gray-400 shrink-0 hidden sm:block">
-                                {new Date(file.lastModified).toLocaleDateString()}
-                              </span>
-                              {!selectMode && (
-                                <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all shrink-0">
-                                  <button onClick={(e) => { e.stopPropagation(); handleShareImage(file); }} className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 hover:bg-blue-100 text-gray-500 hover:text-blue-600 rounded-lg transition-colors" title="Share">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-                                  </button>
-                                  <button onClick={(e) => { e.stopPropagation(); requestDelete(file); }} className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 hover:bg-red-100 text-gray-500 hover:text-red-600 rounded-lg transition-colors" title="Delete">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                                  </button>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-800 truncate" title={displayName(file.filename)}>{displayName(file.filename)}</p>
+                                  <p className="text-xs text-gray-400">{file.folder} · {formatBytes(file.size)}</p>
                                 </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {imgFiles.length > 0 && (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                        {imgFiles.map((file) => (
-                          <FileCard key={file.key} file={file} meta={metadata[file.key]} selectMode={selectMode} selected={selectedKeys.has(file.key)} onToggleSelect={toggleSelect} onDeleteRequest={requestDelete} onShareRequest={handleShareImage} onClick={() => handleFileClick(file)} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                                {!selectMode && (
+                                  <div className="flex gap-1 shrink-0">
+                                    <button onClick={(e) => { e.stopPropagation(); handleShareImage(file); }} className="min-w-[44px] min-h-[44px] flex items-center justify-center p-1.5 hover:bg-blue-100 text-gray-500 hover:text-blue-600 rounded-lg transition-colors" title="Share">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                                    </button>
+                                    <button onClick={(e) => { e.stopPropagation(); requestDelete(file); }} className="min-w-[44px] min-h-[44px] flex items-center justify-center p-1.5 hover:bg-red-100 text-gray-500 hover:text-red-600 rounded-lg transition-colors" title="Delete">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {imgFiles.length > 0 && (
+                        <div className="grid grid-cols-2 gap-3">
+                          {imgFiles.map((file) => (
+                            <FileCard key={file.key} file={file} meta={metadata[file.key]} selectMode={selectMode} selected={selectedKeys.has(file.key)} onToggleSelect={toggleSelect} onDeleteRequest={requestDelete} onShareRequest={handleShareImage} onClick={() => handleFileClick(file)} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* DESKTOP (≥ md): all files as grid cards — FileCard handles both image and doc styles */}
+                    <div className="hidden md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      {activeFiles.map((file) => (
+                        <FileCard key={file.key} file={file} meta={metadata[file.key]} selectMode={selectMode} selected={selectedKeys.has(file.key)} onToggleSelect={toggleSelect} onDeleteRequest={requestDelete} onShareRequest={handleShareImage} onClick={() => handleFileClick(file)} />
+                      ))}
+                    </div>
+                  </>
                 );
               })()
             }
