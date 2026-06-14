@@ -133,6 +133,11 @@ function toTimestamp(value: Date | string | number | undefined | null): number {
   return isNaN(parsed) ? 0 : parsed;
 }
 
+// Strip numeric timestamp prefix added during R2 upload (e.g. "1718123456789-filename.pdf" → "filename.pdf")
+function displayName(filename: string): string {
+  return filename.replace(/^\d{10,}-/, '');
+}
+
 function sortImages(
   images: GalleryImage[],
   sort: SortOption,
@@ -638,13 +643,17 @@ function FileCard({ file, meta, selectMode, selected, onToggleSelect, onDeleteRe
           )}
         </>
       ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 p-4 hover:bg-gray-100 transition-colors">
-          <div className={`w-14 h-14 rounded-2xl ${color} flex items-center justify-center mb-2.5 flex-shrink-0`}>
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 p-2 sm:p-4 hover:bg-gray-100 transition-colors">
+          <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-2xl ${color} flex items-center justify-center mb-1.5 sm:mb-2.5 flex-shrink-0`}>
             <FileTypeIcon ext={ext} />
           </div>
-          <p className="text-sm text-gray-700 font-medium text-center line-clamp-2 w-full px-1 leading-tight">{file.filename}</p>
-          <p className="text-xs text-gray-400 mt-1">{formatBytes(file.size)}</p>
-          <span className="mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium uppercase tracking-wide bg-gray-200 text-gray-600">{ext}</span>
+          <div className="w-full min-w-0 px-1 text-center">
+            <p className="text-xs text-gray-700 font-medium truncate" title={file.filename}>
+              {displayName(file.filename)}
+            </p>
+            <p className="text-[10px] text-gray-400 mt-0.5">{formatBytes(file.size)}</p>
+            <span className="mt-1 inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-gray-200 text-gray-600">{ext}</span>
+          </div>
         </div>
       )}
 
@@ -1230,11 +1239,16 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
         formData.append('folder', folder);
         const res = await fetch('/api/images', { method: 'POST', body: formData });
         if (!res.ok) {
-          let msg = `HTTP ${res.status}`;
-          try {
-            const body = await res.json();
-            if (body.error) msg = body.error;
-          } catch { /* ignore parse error */ }
+          let msg: string;
+          if (res.status === 413) {
+            msg = 'File too large (max ~4 MB per file on this plan)';
+          } else {
+            msg = `HTTP ${res.status}`;
+            try {
+              const body = await res.json();
+              if (body.error) msg = body.error;
+            } catch { /* ignore parse error */ }
+          }
           console.error(`[upload] ${file.name}: ${msg}`);
           failedNames.push(file.name);
           setUploadProgress((prev) => prev ? { ...prev, failed: [...prev.failed, file.name] } : null);
