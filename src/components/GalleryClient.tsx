@@ -35,6 +35,7 @@ interface UploadProgress {
   current: string;
   failed: string[];
   isUploading: boolean;
+  currentPercent?: number;
 }
 
 type SortOption = 'newest' | 'oldest' | 'name-asc' | 'category' | 'style';
@@ -1226,45 +1227,73 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
 
   const uploadFiles = useCallback(async (files: FileWithFolder[]) => {
     if (!files.length) return;
-    setUploadProgress({ total: files.length, completed: 0, current: files[0].file.name, failed: [], isUploading: true });
+    setUploadProgress({ total: files.length, completed: 0, current: files[0].file.name, failed: [], isUploading: true, currentPercent: 0 });
 
     const failedNames: string[] = [];
+    const PRESIGN_THRESHOLD = 4 * 1024 * 1024; // 4 MB
 
     for (let i = 0; i < files.length; i++) {
       const { file, folder } = files[i];
-      setUploadProgress((prev) => prev ? { ...prev, current: file.name, completed: i } : null);
-
-      // Client-side guard: large non-image files exceed Vercel's 4.5 MB serverless payload limit
-      if (!isImageFile(file.name) && file.size > 4 * 1024 * 1024) {
-        const msg = 'File too large for non-image uploads (max 4 MB)';
-        console.warn(`[upload] ${file.name}: ${msg}`);
-        failedNames.push(file.name);
-        setUploadProgress((prev) => prev ? { ...prev, failed: [...prev.failed, file.name] } : null);
-        continue;
-      }
+      setUploadProgress((prev) => prev ? { ...prev, current: file.name, completed: i, currentPercent: 0 } : null);
 
       try {
-        const formData = new FormData();
-        formData.append('files', file);
-        formData.append('folder', folder);
-        const res = await fetch('/api/images', { method: 'POST', body: formData });
-        if (!res.ok) {
-          let msg: string;
-          if (res.status === 413) {
-            msg = 'File too large (max ~4 MB per file on this plan)';
-          } else {
-            msg = `HTTP ${res.status}`;
-            try {
-              const body = await res.json();
-              if (body.error) msg = body.error;
-            } catch { /* ignore parse error */ }
+        if (file.size > PRESIGN_THRESHOLD) {
+          // ── LARGE FILE: presigned URL — browser uploads directly to R2 ──
+          // Step 1: get presigned URL
+          const presignRes = await fetch('/api/upload/presign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: file.name, contentType: file.type || 'application/octet-stream', folder }),
+          });
+          if (!presignRes.ok) throw new Error(`Presign failed: ${presignRes.status}`);
+          const { signedUrl, key } = await presignRes.json();
+
+          // Step 2: PUT directly to R2 with XHR for progress tracking
+          await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.upload.addEventListener('progress', (e) => {
+              if (e.lengthComputable) {
+                const pct = Math.round((e.loaded / e.total) * 100);
+                setUploadProgress((prev) => prev ? { ...prev, currentPercent: pct } : null);
+              }
+            });
+            xhr.addEventListener('load', () => {
+              if (xhr.status >= 200 && xhr.status < 300) resolve();
+              else reject(new Error(`R2 PUT failed: ${xhr.status}`));
+            });
+            xhr.addEventListener('error', () => reject(new Error('R2 upload network error')));
+            xhr.open('PUT', signedUrl);
+            xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+            xhr.send(file);
+          });
+
+          // Step 3: save metadata via small JSON request
+          const metaRes = await fetch('/api/upload/metadata', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key, filename: file.name, contentType: file.type, size: file.size, folder }),
+          });
+          if (!metaRes.ok) console.warn(`[upload] Metadata save failed for ${file.name}: ${metaRes.status}`);
+
+        } else {
+          // ── SMALL FILE: existing FormData route through Vercel ──
+          const formData = new FormData();
+          formData.append('files', file);
+          formData.append('folder', folder);
+          const res = await fetch('/api/images', { method: 'POST', body: formData });
+          if (!res.ok) {
+            let msg = `HTTP ${res.status}`;
+            if (res.status === 413) {
+              msg = 'File too large (max ~4 MB)';
+            } else {
+              try { const b = await res.json(); if (b.error) msg = b.error; } catch { /* ignore */ }
+            }
+            throw new Error(msg);
           }
-          console.error(`[upload] ${file.name}: ${msg}`);
-          failedNames.push(file.name);
-          setUploadProgress((prev) => prev ? { ...prev, failed: [...prev.failed, file.name] } : null);
         }
       } catch (err) {
-        console.error(`[upload] ${file.name}: network error`, err);
+        const msg = err instanceof Error ? err.message : 'network error';
+        console.error(`[upload] ${file.name}: ${msg}`);
         failedNames.push(file.name);
         setUploadProgress((prev) => prev ? { ...prev, failed: [...prev.failed, file.name] } : null);
       }
@@ -1954,7 +1983,7 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
             <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-300 ${uploadProgress.failed.length > 0 ? 'bg-amber-500' : 'bg-blue-600'}`}
-                style={{ width: `${Math.round(((uploadProgress.isUploading ? uploadProgress.completed : uploadProgress.total) / uploadProgress.total) * 100)}%` }}
+                style={{ width: `${Math.round(((uploadProgress.completed + (uploadProgress.isUploading ? (uploadProgress.currentPercent ?? 0) / 100 : 1)) / uploadProgress.total) * 100)}%` }}
               />
             </div>
             {uploadProgress.failed.length > 0 && (
