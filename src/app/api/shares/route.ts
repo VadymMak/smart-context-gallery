@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, getCurrentUser } from '@/lib/auth';
 import { createShare, getUserShares, deleteShare } from '@/lib/shares';
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://smart-context.dev';
+function getOrigin(request: NextRequest): string {
+  const origin = request.headers.get('origin');
+  if (origin) return origin;
+  const host = request.headers.get('host') || 'smart-context.dev';
+  const proto = host.includes('localhost') ? 'http' : 'https';
+  return `${proto}://${host}`;
+}
 
 export async function GET() {
   const authError = await requireAuth();
@@ -52,7 +58,7 @@ export async function POST(request: NextRequest) {
     watermarkText: `Shared by ${user.displayName}`,
   });
 
-  const url = `${BASE_URL}/share/${share.id}`;
+  const url = `${getOrigin(request)}/share/${share.id}`;
   return NextResponse.json({ share, url });
 }
 
