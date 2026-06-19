@@ -15,6 +15,11 @@ interface FileItem {
 
 const MAX_DOWNLOAD_BYTES = 500 * 1024 * 1024;
 
+const THUMB_EXTS = new Set([
+  'jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'heic',
+  'cr2', 'cr3', 'nef', 'arw', 'dng', 'raf', 'rw2', 'orf', 'pef',
+]);
+
 function formatSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -29,19 +34,13 @@ function fileIcon(file: FileItem): string {
   return '📁';
 }
 
-function thumbUrl(file: FileItem, shareId: string): string | null {
-  if (file.isImage) {
-    // folder-file already validates security via shareId in the URL path
-    return `/api/share/${shareId}/folder-file?key=${encodeURIComponent(file.key)}&thumb=1`;
-  }
-  if (file.isRaw) {
-    // RAW: use dedicated thumb endpoint (extracts embedded JPEG from CR2 etc.)
-    return `/api/thumb?shareId=${shareId}&key=${encodeURIComponent(file.key)}`;
-  }
-  return null;
+// Single endpoint for all thumbnails (image + RAW)
+function getThumbUrl(file: FileItem, shareId: string): string | null {
+  if (!THUMB_EXTS.has(file.ext)) return null;
+  return `/api/share/${shareId}/thumb?key=${encodeURIComponent(file.key)}`;
 }
 
-// Display name: strip timestamp prefix added by the uploader (e.g. "1781867787686-img.cr2" → "img.cr2")
+// Display name: strip timestamp prefix (e.g. "1781867787686-img.cr2" → "img.cr2")
 function displayName(filename: string): string {
   return filename.replace(/^\d{13}-/, '');
 }
@@ -60,9 +59,8 @@ function GridCard({
   allowSelect: boolean;
   onToggle: (key: string) => void;
 }) {
-  const url = thumbUrl(file, shareId);
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState(false);
+  const url = getThumbUrl(file, shareId);
+  const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading');
 
   return (
     <div
@@ -73,30 +71,25 @@ function GridCard({
     >
       {/* Thumbnail area — 4:3 aspect ratio */}
       <div className="relative w-full pb-[75%] bg-gray-100 overflow-hidden">
-        {url && !error ? (
-          <>
-            {/* Placeholder */}
-            {!loaded && (
-              <div className="absolute inset-0 flex items-center justify-center text-2xl text-gray-300">
-                {fileIcon(file)}
-              </div>
-            )}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={url}
-              alt={file.filename}
-              loading="lazy"
-              onLoad={() => setLoaded(true)}
-              onError={() => setError(true)}
-              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 ${
-                loaded ? 'opacity-100' : 'opacity-0'
-              }`}
-            />
-          </>
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-4xl">
+        {/* Placeholder (shown while loading or on error) */}
+        {(status !== 'ok') && (
+          <div className="absolute inset-0 flex items-center justify-center text-4xl text-gray-300 select-none">
             {fileIcon(file)}
           </div>
+        )}
+
+        {url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={url}
+            alt={file.filename}
+            loading="lazy"
+            onLoad={() => setStatus('ok')}
+            onError={() => setStatus('error')}
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 ${
+              status === 'ok' ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
         )}
 
         {/* Checkbox overlay */}
@@ -388,8 +381,7 @@ function ListRow({
   onToggle: (key: string) => void;
   isLast: boolean;
 }) {
-  const url = thumbUrl(file, shareId);
-  const [imgError, setImgError] = useState(false);
+  const url = getThumbUrl(file, shareId);
 
   return (
     <div
@@ -412,13 +404,13 @@ function ListRow({
 
       {/* Mini thumbnail or icon */}
       <div className="w-10 h-8 rounded flex-shrink-0 overflow-hidden bg-gray-100 flex items-center justify-center">
-        {url && !imgError ? (
+        {url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={url}
             alt=""
             loading="lazy"
-            onError={() => setImgError(true)}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
             className="w-full h-full object-cover"
           />
         ) : (
