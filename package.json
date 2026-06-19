@@ -36,5 +36,8 @@
   },
   "optionalDependencies": {
     "@img/sharp-linux-x64": "^0.35.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["sharp", "@img/sharp-linux-x64", "@img/sharp-libvips-linux-x64"]
   }
 }
