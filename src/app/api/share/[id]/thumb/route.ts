@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import sharp from 'sharp';
-import exifr from 'exifr';
+import { extractRawThumbnail } from '@/lib/raw-thumb';
 import { getShareById, isShareExpired } from '@/lib/shares';
 import { r2, BUCKET } from '@/lib/r2';
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
@@ -64,17 +64,12 @@ export async function GET(
 
   let inputBuffer: Buffer = fileBuffer;
   if (isRaw) {
-    let embedded: Uint8Array | undefined;
-    try {
-      embedded = await exifr.thumbnail(fileBuffer);
-    } catch (err) {
-      console.warn('[share/thumb] exifr.thumbnail failed for', key, ':', err);
-    }
-    if (!embedded || embedded.length < 100) {
+    const embedded = await extractRawThumbnail(fileBuffer);
+    if (!embedded) {
       console.warn('[share/thumb] No embedded JPEG in', key, '— file size:', fileBuffer.length);
       return new Response(null, { status: 204 });
     }
-    inputBuffer = Buffer.from(toArrayBuffer(embedded));
+    inputBuffer = embedded;
   }
 
   let thumbBuffer: Buffer;

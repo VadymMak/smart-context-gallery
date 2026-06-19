@@ -4,7 +4,7 @@ import { r2, BUCKET } from '@/lib/r2';
 import { getShareById, isShareExpired } from '@/lib/shares';
 import { getCurrentUser } from '@/lib/auth';
 import sharp from 'sharp';
-import exifr from 'exifr';
+import { extractRawThumbnail } from '@/lib/raw-thumb';
 
 const RAW_EXTS = new Set(['cr2', 'cr3', 'nef', 'arw', 'dng', 'raf', 'rw2', 'orf', 'pef']);
 
@@ -86,19 +86,14 @@ export async function GET(req: NextRequest) {
     // ── Generate thumbnail ──────────────────────────────────────────────────
     let source: Buffer = fileBuffer;
     if (isRaw) {
-      console.log('[thumb] calling exifr.thumbnail...');
-      let embedded: Uint8Array | undefined;
-      try {
-        embedded = await exifr.thumbnail(fileBuffer);
-        console.log('[thumb] exifr result:', embedded ? `${embedded.length} bytes` : 'undefined');
-      } catch (exifrErr) {
-        console.error('[thumb] exifr CRASH:', exifrErr);
-      }
-      if (!embedded || embedded.length < 100) {
-        console.warn('[thumb] no embedded JPEG — returning 204. File size was:', fileBuffer.length);
+      console.log('[thumb] extracting RAW thumbnail, file size:', fileBuffer.length);
+      const embedded = await extractRawThumbnail(fileBuffer);
+      console.log('[thumb] extracted:', embedded ? `${embedded.length} bytes` : 'null');
+      if (!embedded) {
+        console.warn('[thumb] no embedded JPEG — returning 204');
         return new Response(null, { status: 204 });
       }
-      source = Buffer.from(toArrayBuffer(embedded));
+      source = embedded;
     }
 
     console.log('[thumb] calling sharp, source size:', source.length);

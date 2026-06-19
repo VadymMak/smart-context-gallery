@@ -20,9 +20,9 @@ importers:
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
-      exifr:
-        specifier: ^7.1.3
-        version: 7.1.3
+      dcraw:
+        specifier: ^1.0.3
+        version: 1.0.3
       mammoth:
         specifier: ^1.12.0
         version: 1.12.0
@@ -1433,6 +1433,9 @@ packages:
     resolution: {integrity: sha512-BS8PfmtDGnrgYdOonGZQdLZslWIeCGFP9tpan0hi1Co2Zr2NKADsvGYA8XxuG/4UWgJ6Cjtv+YJnB6MM69QGlQ==}
     engines: {node: '>= 0.4'}
 
+  dcraw@1.0.3:
+    resolution: {integrity: sha512-Eer+8s95I1itFQUCOqMxNNLPLR0MPjBHxuPY7AgbdcMY/aohbJhf8/mvA+NqKUj+MWm0fEKm17CmESqbzzcvZg==}
+
   debug@3.2.7:
     resolution: {integrity: sha512-CFjzYYAi4ThfiQvizrFQevTTXHtnCqWfe7x1AhgEscTz6ZbLbfoLRLPugTQyBth6f8ZERVUSyWHFD/7Wu4t1XQ==}
     peerDependencies:
@@ -1659,9 +1662,6 @@ packages:
   events@3.3.0:
     resolution: {integrity: sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==}
     engines: {node: '>=0.8.x'}
-
-  exifr@7.1.3:
-    resolution: {integrity: sha512-g/aje2noHivrRSLbAUtBPWFbxKdKhgj/xr1vATDdUXPOFYJlQ62Ft0oy+72V6XLIpDJfHs6gXLbBLAolqOXYRw==}
 
   fast-deep-equal@3.1.3:
     resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
@@ -4051,6 +4051,8 @@ snapshots:
       es-errors: 1.3.0
       is-data-view: 1.0.2
 
+  dcraw@1.0.3: {}
+
   debug@3.2.7:
     dependencies:
       ms: 2.1.3
@@ -4419,8 +4421,6 @@ snapshots:
       - bare-abort-controller
 
   events@3.3.0: {}
-
-  exifr@7.1.3: {}
 
   fast-deep-equal@3.1.3: {}
 
