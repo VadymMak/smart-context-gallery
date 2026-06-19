@@ -34,69 +34,82 @@ export async function GET(
     return new Response('Not an image', { status: 400 });
   }
 
-  // ── Cache hit — same key used by /api/thumb so cache is shared ──────────
-  const thumbKey = `_thumbs/${key}.webp`;
-  try {
-    const cached = await r2.send(new GetObjectCommand({ Bucket: BUCKET, Key: thumbKey }));
-    if (cached.Body) {
-      return new Response(cached.Body.transformToWebStream(), {
-        headers: {
-          'Content-Type': 'image/webp',
-          'Cache-Control': 'public, max-age=31536000, immutable',
-        },
-      });
+  // ── Cache hit (shared with /api/thumb) ──────────────────────────────────
+  const webpKey  = `_thumbs/${key}.webp`;
+  const jpegKey  = `_thumbs/${key}.jpg`;
+  const cacheKeys = isRaw ? [jpegKey, webpKey] : [webpKey];
+
+  for (const cacheKey of cacheKeys) {
+    try {
+      const cached = await r2.send(new GetObjectCommand({ Bucket: BUCKET, Key: cacheKey }));
+      if (cached.Body) {
+        const contentType = cacheKey.endsWith('.jpg') ? 'image/jpeg' : 'image/webp';
+        return new Response(cached.Body.transformToWebStream(), {
+          headers: {
+            'Content-Type': contentType,
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          },
+        });
+      }
+    } catch {
+      // cache miss — try next
     }
-  } catch {
-    // cache miss — continue
   }
 
-  // ── Fetch full file from R2 (no Range — CR2 preview can sit past 3 MB) ──
+  // ── Fetch full file from R2 ─────────────────────────────────────────────
   let obj;
   try {
     obj = await r2.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
   } catch {
     return new Response('Not found', { status: 404 });
   }
-
   if (!obj.Body) return new Response('Not found', { status: 404 });
 
   const fileBuffer = Buffer.from(toArrayBuffer(await obj.Body.transformToByteArray()));
 
-  let inputBuffer: Buffer = fileBuffer;
+  // ── CR2/RAW: return embedded JPEG directly (no sharp) ──────────────────
   if (isRaw) {
-    const embedded = await extractRawThumbnail(fileBuffer);
+    console.log('[share/thumb] CR2/RAW processing, file size:', fileBuffer.length);
+    const embedded = extractRawThumbnail(fileBuffer);
+
     if (!embedded) {
-      console.warn('[share/thumb] No embedded JPEG in', key, '— file size:', fileBuffer.length);
+      console.warn('[share/thumb] No embedded JPEG in', key);
       return new Response(null, { status: 204 });
     }
-    if (embedded[0] !== 0xff || embedded[1] !== 0xd8) {
-      console.warn('[share/thumb] Invalid JPEG header in', key);
-      return new Response(null, { status: 204 });
-    }
-    console.log('[share/thumb] Extracted JPEG size:', embedded.length, 'from CR2:', fileBuffer.length);
-    inputBuffer = embedded;
+
+    console.log('[share/thumb] Returning embedded JPEG:', embedded.length, 'bytes');
+
+    r2.send(new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: jpegKey,
+      Body: embedded,
+      ContentType: 'image/jpeg',
+      Metadata: { 'source-key': key },
+    })).catch(() => {});
+
+    return new Response(toArrayBuffer(embedded), {
+      headers: {
+        'Content-Type': 'image/jpeg',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
   }
 
+  // ── Regular images: resize with sharp → WebP ────────────────────────────
   let thumbBuffer: Buffer;
   try {
-    thumbBuffer = await sharp(inputBuffer)
+    thumbBuffer = await sharp(fileBuffer)
       .resize(320, 240, { fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 80 })
       .toBuffer();
   } catch (err) {
-    console.warn('[share/thumb] sharp failed, trying without resize:', err);
-    try {
-      thumbBuffer = await sharp(inputBuffer).webp({ quality: 70 }).toBuffer();
-    } catch (e) {
-      console.error('[share/thumb] sharp total fail for', key, ':', e);
-      return new Response(null, { status: 204 });
-    }
+    console.error('[share/thumb] sharp failed for', key, ':', err);
+    return new Response(null, { status: 204 });
   }
 
-  // ── Write to cache (fire-and-forget) ────────────────────────────────────
   r2.send(new PutObjectCommand({
     Bucket: BUCKET,
-    Key: thumbKey,
+    Key: webpKey,
     Body: thumbBuffer,
     ContentType: 'image/webp',
     Metadata: { 'source-key': key },

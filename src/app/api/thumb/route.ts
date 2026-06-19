@@ -51,28 +51,35 @@ export async function GET(req: NextRequest) {
       console.log('[thumb] auth OK, user:', user.id);
     }
 
-    // ── Cache hit ───────────────────────────────────────────────────────────
-    const thumbKey = `_thumbs/${key}.webp`;
-    try {
-      const cached = await r2.send(new GetObjectCommand({ Bucket: BUCKET, Key: thumbKey }));
-      if (cached.Body) {
-        console.log('[thumb] cache HIT:', thumbKey);
-        return new Response(cached.Body.transformToWebStream(), {
-          headers: {
-            'Content-Type': 'image/webp',
-            'Cache-Control': 'public, max-age=31536000, immutable',
-          },
-        });
-      }
-    } catch (cacheErr) {
-      console.log('[thumb] cache MISS:', (cacheErr as Error).message);
-    }
-
-    // ── Fetch from R2 ───────────────────────────────────────────────────────
+    // ── Cache hit — check .webp (regular) then .jpg (CR2) ──────────────────
     const ext   = key.split('.').pop()?.toLowerCase() ?? '';
     const isRaw = RAW_EXTS.has(ext);
-    console.log('[thumb] ext:', ext, 'isRaw:', isRaw);
 
+    const webpKey = `_thumbs/${key}.webp`;
+    const jpegKey = `_thumbs/${key}.jpg`;
+
+    // For RAW: check jpg cache first, then webp. For images: check webp only.
+    const cacheKeys = isRaw ? [jpegKey, webpKey] : [webpKey];
+    for (const cacheKey of cacheKeys) {
+      try {
+        const cached = await r2.send(new GetObjectCommand({ Bucket: BUCKET, Key: cacheKey }));
+        if (cached.Body) {
+          console.log('[thumb] cache HIT:', cacheKey);
+          const contentType = cacheKey.endsWith('.jpg') ? 'image/jpeg' : 'image/webp';
+          return new Response(cached.Body.transformToWebStream(), {
+            headers: {
+              'Content-Type': contentType,
+              'Cache-Control': 'public, max-age=31536000, immutable',
+            },
+          });
+        }
+      } catch {
+        // cache miss — try next key or continue
+      }
+    }
+    console.log('[thumb] cache MISS, ext:', ext, 'isRaw:', isRaw);
+
+    // ── Fetch full file from R2 ─────────────────────────────────────────────
     let fileBuffer: Buffer;
     try {
       console.log('[thumb] fetching from R2:', key);
@@ -86,23 +93,40 @@ export async function GET(req: NextRequest) {
       return new Response('Not found', { status: 404 });
     }
 
-    // ── Generate thumbnail ──────────────────────────────────────────────────
-    let source: Buffer = fileBuffer;
+    // ── CR2/RAW: return embedded JPEG directly (no sharp) ──────────────────
     if (isRaw) {
-      console.log('[thumb] Starting CR2 processing for:', key, 'buffer:', fileBuffer.length);
-      const embedded = await extractRawThumbnail(fileBuffer);
+      console.log('[thumb] CR2/RAW processing, file size:', fileBuffer.length);
+      const embedded = extractRawThumbnail(fileBuffer);
 
       if (!embedded) {
-        console.warn('[thumb] extractRawThumbnail returned null for:', key);
+        console.warn('[thumb] No embedded JPEG found for:', key);
         return new Response(null, { status: 204 });
       }
-      source = embedded;
+
+      console.log('[thumb] Returning embedded JPEG:', embedded.length, 'bytes');
+
+      // Cache as JPEG (fire-and-forget)
+      r2.send(new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: jpegKey,
+        Body: embedded,
+        ContentType: 'image/jpeg',
+        Metadata: { 'source-key': key },
+      })).catch((err) => console.warn('[thumb] cache write failed:', err));
+
+      return new Response(toArrayBuffer(embedded), {
+        headers: {
+          'Content-Type': 'image/jpeg',
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      });
     }
 
-    console.log('[thumb] Running sharp on', source.length, 'bytes');
+    // ── Regular images: resize with sharp → WebP ────────────────────────────
+    console.log('[thumb] Running sharp on', fileBuffer.length, 'bytes');
     let thumbBuffer: Buffer;
     try {
-      thumbBuffer = await sharp(source)
+      thumbBuffer = await sharp(fileBuffer)
         .resize(320, 240, { fit: 'inside', withoutEnlargement: true })
         .webp({ quality: 80 })
         .toBuffer();
@@ -112,10 +136,10 @@ export async function GET(req: NextRequest) {
       return new Response(null, { status: 204 });
     }
 
-    // ── Save to cache (fire-and-forget) ─────────────────────────────────────
+    // Cache WebP (fire-and-forget)
     r2.send(new PutObjectCommand({
       Bucket: BUCKET,
-      Key: thumbKey,
+      Key: webpKey,
       Body: thumbBuffer,
       ContentType: 'image/webp',
       Metadata: { 'source-key': key },
