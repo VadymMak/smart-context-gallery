@@ -49,34 +49,30 @@ function displayName(filename: string): string {
 function GridCard({
   file,
   shareId,
-  mode,
   selected,
   allowSelect,
   onToggle,
+  onPreview,
 }: {
   file: FileItem;
   shareId: string;
-  mode: 'preview' | 'download';
   selected: boolean;
   allowSelect: boolean;
   onToggle: (key: string) => void;
+  onPreview: (file: FileItem) => void;
 }) {
   const url = getThumbUrl(file, shareId);
   const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading');
-  const isPreview = mode === 'preview';
 
   return (
     <div
-      onClick={() => allowSelect && onToggle(file.key)}
-      onContextMenu={isPreview ? (e) => e.preventDefault() : undefined}
-      className={`relative bg-white rounded-xl overflow-hidden border-2 transition-all ${
-        allowSelect ? 'cursor-pointer' : ''
-      } ${selected ? 'border-blue-500 shadow-md' : 'border-gray-100 hover:border-gray-300'}`}
+      onClick={() => onPreview(file)}
+      className="relative bg-white rounded-xl overflow-hidden border-2 transition-all cursor-pointer border-gray-100 hover:border-gray-300"
     >
       {/* Thumbnail area — 4:3 aspect ratio */}
-      <div className="relative w-full pb-[75%] bg-gray-100 overflow-hidden group">
+      <div className="relative w-full pb-[75%] bg-gray-100 overflow-hidden">
         {/* Placeholder (shown while loading or on error) */}
-        {(status !== 'ok') && (
+        {status !== 'ok' && (
           <div className="absolute inset-0 flex items-center justify-center text-4xl text-gray-300 select-none">
             {fileIcon(file)}
           </div>
@@ -90,27 +86,19 @@ function GridCard({
             loading="lazy"
             onLoad={() => setStatus('ok')}
             onError={() => setStatus('error')}
-            className={`absolute inset-0 w-full h-full object-cover transition-all duration-300 select-none ${
+            className={`absolute inset-0 w-full h-full object-cover select-none transition-opacity duration-200 ${
               status === 'ok' ? 'opacity-100' : 'opacity-0'
-            } ${isPreview ? 'blur-sm group-hover:blur-0 pointer-events-none' : ''}`}
+            }`}
           />
         )}
 
-        {/* Preview-mode overlay — blocks drag and right-click */}
-        {isPreview && (
-          <div
-            className="absolute inset-0 z-10 group-hover:opacity-0 transition-opacity duration-300"
-            onContextMenu={(e) => e.preventDefault()}
-          />
-        )}
-
-        {/* Checkbox overlay */}
+        {/* Checkbox overlay — stopPropagation so it doesn't open lightbox */}
         {allowSelect && (
           <input
             type="checkbox"
             checked={selected}
             onChange={() => onToggle(file.key)}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onToggle(file.key); }}
             className="absolute top-1.5 left-1.5 w-4 h-4 accent-blue-600 cursor-pointer z-10"
           />
         )}
@@ -155,6 +143,7 @@ export function FolderShareView({ shareId, folderName, mode }: Props) {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
+  const [lightboxFile, setLightboxFile] = useState<FileItem | null>(null);
 
   useEffect(() => {
     fetch(`/api/share/${shareId}/files`)
@@ -216,11 +205,7 @@ export function FolderShareView({ shareId, folderName, mode }: Props) {
   }
 
   return (
-    <div
-      className="min-h-screen bg-gray-50"
-      onContextMenu={mode === 'preview' ? (e) => e.preventDefault() : undefined}
-      style={mode === 'preview' ? { userSelect: 'none', WebkitUserSelect: 'none' } : undefined}
-    >
+    <div className="min-h-screen bg-gray-50">
       {/* Sticky header */}
       <header className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-3">
@@ -361,10 +346,10 @@ export function FolderShareView({ shareId, folderName, mode }: Props) {
                 key={file.key}
                 file={file}
                 shareId={shareId}
-                mode={mode}
                 selected={selected.has(file.key)}
                 allowSelect={mode === 'download'}
                 onToggle={toggle}
+                onPreview={setLightboxFile}
               />
             ))}
           </div>
@@ -378,6 +363,46 @@ export function FolderShareView({ shareId, folderName, mode }: Props) {
             : `Shared by ${folderName}`}
         </p>
       </footer>
+
+      {/* ── Lightbox ──────────────────────────────────────────────────────────── */}
+      {lightboxFile && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setLightboxFile(null)}
+          onContextMenu={(e) => e.preventDefault()}
+          style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/share/${shareId}/thumb?key=${encodeURIComponent(lightboxFile.key)}&v=20260619`}
+              alt={lightboxFile.filename}
+              draggable={false}
+              className="max-w-full max-h-[90vh] object-contain select-none pointer-events-none rounded-lg shadow-2xl"
+            />
+            {/* Transparent overlay blocks right-click save */}
+            <div
+              className="absolute inset-0 rounded-lg"
+              onContextMenu={(e) => e.preventDefault()}
+            />
+            {/* Close button */}
+            <button
+              onClick={() => setLightboxFile(null)}
+              className="absolute -top-3 -right-3 w-8 h-8 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-lg transition-colors"
+            >
+              ×
+            </button>
+            {/* Filename */}
+            <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs text-center py-1.5 rounded-b-lg">
+              {displayName(lightboxFile.filename)}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
