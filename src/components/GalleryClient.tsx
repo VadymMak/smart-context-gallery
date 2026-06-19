@@ -198,6 +198,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 // ─── File type helpers ────────────────────────────────────────────────────────
 
 const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','webp','svg','bmp','heic','avif']);
+const RAW_EXTS   = new Set(['cr2','cr3','nef','arw','dng','raf','rw2','orf','pef']);
 const DOC_EXTS   = new Set(['pdf','doc','docx']);
 const SHEET_EXTS = new Set(['xls','xlsx','csv']);
 const SLIDE_EXTS = new Set(['ppt','pptx']);
@@ -206,11 +207,12 @@ const ARCH_EXTS  = new Set(['zip','rar','7z','tar','gz']);
 const VIDEO_EXTS = new Set(['mp4','mov','avi','mkv','webm']);
 const AUDIO_EXTS = new Set(['mp3','wav','ogg','flac','aac']);
 
-type FileKind = 'image' | 'pdf' | 'document' | 'spreadsheet' | 'presentation' | 'text' | 'archive' | 'video' | 'audio' | 'file';
+type FileKind = 'image' | 'raw' | 'pdf' | 'document' | 'spreadsheet' | 'presentation' | 'text' | 'archive' | 'video' | 'audio' | 'file';
 
 function getFileKind(filename: string): { kind: FileKind; color: string } {
   const ext = filename.toLowerCase().split('.').pop() || '';
   if (IMAGE_EXTS.has(ext)) return { kind: 'image',        color: 'bg-blue-100 text-blue-700' };
+  if (RAW_EXTS.has(ext))   return { kind: 'raw',          color: 'bg-gray-100 text-gray-700' };
   if (ext === 'pdf')        return { kind: 'pdf',          color: 'bg-red-100 text-red-700' };
   if (DOC_EXTS.has(ext))   return { kind: 'document',     color: 'bg-blue-100 text-blue-700' };
   if (SHEET_EXTS.has(ext)) return { kind: 'spreadsheet',  color: 'bg-green-100 text-green-700' };
@@ -617,8 +619,10 @@ function FileCard({ file, meta, selectMode, selected, onToggleSelect, onDeleteRe
 }) {
   const { kind, color } = getFileKind(file.filename);
   const isImg = kind === 'image';
+  const isRaw = kind === 'raw';
   const ext = file.filename.toLowerCase().split('.').pop() || '';
   const categoryClass = meta?.category ? (CATEGORY_COLORS[meta.category] || CATEGORY_COLORS.other) : '';
+  const [rawThumbError, setRawThumbError] = useState(false);
 
   return (
     <div
@@ -643,6 +647,19 @@ function FileCard({ file, meta, selectMode, selected, onToggleSelect, onDeleteRe
               )}
             </div>
           )}
+        </>
+      ) : isRaw && !rawThumbError ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/thumb?key=${encodeURIComponent(file.key)}`}
+            alt={file.filename}
+            className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300"
+            loading="lazy"
+            onError={() => setRawThumbError(true)}
+          />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors duration-200" />
+          <span className="absolute top-2 right-2 bg-black/50 text-white text-[10px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">RAW</span>
         </>
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 p-2 sm:p-4 hover:bg-gray-100 transition-colors">
