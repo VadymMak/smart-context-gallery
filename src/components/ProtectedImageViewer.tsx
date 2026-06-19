@@ -26,8 +26,8 @@ export function ProtectedImageViewer({ shareId, watermarkText, fileUrl }: Props)
     img.src = fileUrl ?? `/api/share/${shareId}/file`;
 
     img.onload = () => {
-      const maxW = window.innerWidth * 0.92;
-      const maxH = window.innerHeight * 0.82;
+      const maxW = window.innerWidth * 0.95;
+      const maxH = window.innerHeight * 0.88;
       const scaleW = Math.min(1, maxW / img.width);
       const scaleH = Math.min(1, maxH / img.height);
       const scale = Math.min(scaleW, scaleH);

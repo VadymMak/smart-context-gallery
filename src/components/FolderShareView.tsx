@@ -368,26 +368,26 @@ export function FolderShareView({ shareId, folderName, mode }: Props) {
       {/* ── Lightbox ──────────────────────────────────────────────────────────── */}
       {lightboxFile && (
         <div
-          className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center p-4"
+          className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center"
           onClick={() => setLightboxFile(null)}
         >
           <div
-            className="relative w-full h-full max-w-6xl max-h-[95vh] flex items-center justify-center"
+            className="relative w-full h-full flex items-center justify-center"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close button */}
             <button
               onClick={() => setLightboxFile(null)}
-              className="absolute top-2 right-2 z-10 w-9 h-9 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-xl transition-colors"
+              className="absolute top-4 right-4 z-10 w-9 h-9 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-xl transition-colors"
             >
               ✕
             </button>
             {/* Filename */}
-            <div className="absolute top-2 left-4 z-10 text-white/60 text-sm truncate max-w-[80%] select-none">
+            <div className="absolute top-4 left-4 z-10 text-white/60 text-sm truncate max-w-[80%] select-none">
               {displayName(lightboxFile.filename)}
             </div>
             {/* Protected viewer: canvas + watermark + blur-on-tab-switch */}
-            <div className="w-full h-full flex items-center justify-center">
+            <div className="flex items-center justify-center">
               <ProtectedImageViewer
                 shareId={shareId}
                 watermarkText="Preview only"
