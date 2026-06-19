@@ -774,7 +774,7 @@ function Lightbox({ images, index, meta, onClose, onPrev, onNext, projects, allF
         <div className="flex flex-col items-center justify-center mt-12" onClick={(e) => e.stopPropagation()}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={getFileKind(image.filename).kind === 'raw' ? `/api/thumb?key=${encodeURIComponent(image.key)}` : image.url}
+            src={getFileKind(image.filename).kind === 'raw' ? `/api/raw-preview?key=${encodeURIComponent(image.key)}` : image.url}
             alt={image.filename}
             className="max-w-full max-h-[75vh] object-contain rounded-xl"
           />
