@@ -596,7 +596,11 @@ function DeleteConfirmModal({ image, deleting, onConfirm, onCancel }: {
         <p className="text-gray-500 text-sm mb-4">This cannot be undone.</p>
         <div className="flex items-center gap-3 mb-6 p-3 bg-gray-50 rounded-xl">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={image.url} alt="" className="w-16 h-16 object-cover rounded-lg flex-shrink-0" />
+          <img
+            src={getFileKind(image.filename).kind === 'raw' ? `/api/thumb?key=${encodeURIComponent(image.key)}` : image.url}
+            alt=""
+            className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
+          />
           <span className="text-sm text-gray-600 truncate">{image.filename}</span>
         </div>
         <div className="flex gap-3">
@@ -768,9 +772,26 @@ function Lightbox({ images, index, meta, onClose, onPrev, onNext, projects, allF
         </div>
         {index > 0 && <button className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-xl transition-colors" onClick={(e) => { e.stopPropagation(); onPrev(); }}>‹</button>}
         {index < images.length - 1 && <button className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-xl transition-colors" onClick={(e) => { e.stopPropagation(); onNext(); }}>›</button>}
-        <div className="max-h-[80vh] flex items-center justify-center mt-12" onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-col items-center justify-center mt-12" onClick={(e) => e.stopPropagation()}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={image.url} alt={image.filename} className="max-w-full max-h-[80vh] object-contain rounded-xl" />
+          <img
+            src={getFileKind(image.filename).kind === 'raw' ? `/api/thumb?key=${encodeURIComponent(image.key)}` : image.url}
+            alt={image.filename}
+            className="max-w-full max-h-[75vh] object-contain rounded-xl"
+          />
+          {getFileKind(image.filename).kind === 'raw' && (
+            <div className="flex flex-col items-center gap-2 mt-3">
+              <p className="text-white/40 text-xs">RAW preview — open the original in Lightroom or Camera Raw for full quality</p>
+              <a
+                href={image.url}
+                download={image.filename}
+                onClick={(e) => e.stopPropagation()}
+                className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm rounded-xl transition-colors"
+              >
+                ⬇ Download original {image.filename.split('.').pop()?.toUpperCase()}
+              </a>
+            </div>
+          )}
         </div>
         <p className="text-white/50 text-xs mt-3">{index + 1} / {images.length}</p>
       </div>
@@ -1188,7 +1209,10 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
     lastModified: new Date(r.uploadedAt), folder: r.folder, filename: r.filename,
   }));
   // Lightbox only shows image files
-  const lightboxImages = (isSearchMode ? searchImages_ : displayImages).filter((f) => isImageFile(f.filename));
+  const lightboxImages = (isSearchMode ? searchImages_ : displayImages).filter((f) => {
+    const { kind } = getFileKind(f.filename);
+    return kind === 'image' || kind === 'raw';
+  });
 
   const projectCount = (p: string) => Object.values(metadata).filter((m) => m.project === p).length;
 
@@ -1626,7 +1650,8 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
 
 
   const handleFileClick = useCallback((file: GalleryImage) => {
-    if (isImageFile(file.filename)) {
+    const { kind } = getFileKind(file.filename);
+    if (kind === 'image' || kind === 'raw') {
       const idx = lightboxImages.findIndex((img) => img.key === file.key);
       if (idx !== -1) setLightboxIndex(idx);
     } else if (file.filename.toLowerCase().endsWith('.pdf')) {
@@ -1873,6 +1898,16 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
                           {kind === 'image' ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={file.url} alt="" className="w-10 h-10 object-cover rounded-lg flex-shrink-0" />
+                          ) : kind === 'raw' ? (
+                            <div className="w-10 h-10 rounded-lg flex-shrink-0 bg-gray-200 overflow-hidden">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={`/api/thumb?key=${encodeURIComponent(file.key)}`}
+                                alt=""
+                                className="w-full h-full object-cover"
+                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            </div>
                           ) : (
                             <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
                               <FileTypeIcon ext={ext} />
@@ -1901,8 +1936,8 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
                   </div>
                 );
 
-                const imgFiles = activeFiles.filter(f => isImageFile(f.filename));
-                const docFiles = activeFiles.filter(f => !isImageFile(f.filename));
+                const imgFiles = activeFiles.filter(f => { const { kind } = getFileKind(f.filename); return kind === 'image' || kind === 'raw'; });
+                const docFiles = activeFiles.filter(f => { const { kind } = getFileKind(f.filename); return kind !== 'image' && kind !== 'raw'; });
                 return (
                   <>
                     {/* MOBILE (< md): doc rows above image 2-col grid */}
