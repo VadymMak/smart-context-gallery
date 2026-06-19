@@ -5,9 +5,10 @@ import { useEffect, useRef, useState } from 'react';
 interface Props {
   shareId: string;
   watermarkText: string;
+  fileUrl?: string; // override default /api/share/${shareId}/file for folder items
 }
 
-export function ProtectedImageViewer({ shareId, watermarkText }: Props) {
+export function ProtectedImageViewer({ shareId, watermarkText, fileUrl }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [blurred, setBlurred] = useState(false);
@@ -22,7 +23,7 @@ export function ProtectedImageViewer({ shareId, watermarkText }: Props) {
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.src = `/api/share/${shareId}/file`;
+    img.src = fileUrl ?? `/api/share/${shareId}/file`;
 
     img.onload = () => {
       const maxW = Math.min(img.width, window.innerWidth * 0.9);
@@ -51,7 +52,7 @@ export function ProtectedImageViewer({ shareId, watermarkText }: Props) {
     };
 
     img.onerror = () => setLoading(false);
-  }, [shareId, watermarkText]);
+  }, [shareId, watermarkText, fileUrl]);
 
   // Blur on focus loss / tab switch
   useEffect(() => {

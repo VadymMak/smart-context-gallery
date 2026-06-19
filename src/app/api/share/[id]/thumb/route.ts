@@ -36,7 +36,8 @@ export async function GET(
   // ── Cache hit (shared with /api/thumb) ──────────────────────────────────
   const webpKey  = `_thumbs/${key}.webp`;
   const jpegKey  = `_thumbs/${key}.jpg`;
-  const cacheKeys = isRaw ? [jpegKey, webpKey] : [webpKey];
+  // webpKey first — batch generator saves .webp; .jpg is legacy fallback
+  const cacheKeys = isRaw ? [webpKey, jpegKey] : [webpKey];
 
   for (const cacheKey of cacheKeys) {
     try {
@@ -46,7 +47,7 @@ export async function GET(
         return new Response(cached.Body.transformToWebStream(), {
           headers: {
             'Content-Type': contentType,
-            'Cache-Control': 'public, max-age=31536000, immutable',
+            'Cache-Control': 'public, max-age=86400',
           },
         });
       }
@@ -95,7 +96,7 @@ export async function GET(
     return new Response(toArrayBuffer(body), {
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Cache-Control': 'public, max-age=86400',
       },
     });
   }
@@ -127,7 +128,7 @@ export async function GET(
   return new Response(toArrayBuffer(thumbBuffer), {
     headers: {
       'Content-Type': 'image/webp',
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cache-Control': 'public, max-age=86400',
     },
   });
 }

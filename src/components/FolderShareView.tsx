@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { ProtectedImageViewer } from '@/components/ProtectedImageViewer';
 
 interface FileItem {
   key: string;
@@ -37,7 +38,7 @@ function fileIcon(file: FileItem): string {
 // Single endpoint for all thumbnails (image + RAW)
 function getThumbUrl(file: FileItem, shareId: string): string | null {
   if (!THUMB_EXTS.has(file.ext)) return null;
-  return `/api/share/${shareId}/thumb?key=${encodeURIComponent(file.key)}&v=20260619`;
+  return `/api/share/${shareId}/thumb?key=${encodeURIComponent(file.key)}&v=20260620`;
 }
 
 // Display name: strip timestamp prefix (e.g. "1781867787686-img.cr2" → "img.cr2")
@@ -367,39 +368,27 @@ export function FolderShareView({ shareId, folderName, mode }: Props) {
       {/* ── Lightbox ──────────────────────────────────────────────────────────── */}
       {lightboxFile && (
         <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          className="fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center p-4"
           onClick={() => setLightboxFile(null)}
-          onContextMenu={(e) => e.preventDefault()}
-          style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
         >
-          <div
-            className="relative max-w-4xl max-h-[90vh] flex items-center justify-center"
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => e.preventDefault()}
+          {/* Close button */}
+          <button
+            onClick={() => setLightboxFile(null)}
+            className="absolute top-4 right-4 z-10 w-9 h-9 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-xl transition-colors"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`/api/share/${shareId}/thumb?key=${encodeURIComponent(lightboxFile.key)}&v=20260619`}
-              alt={lightboxFile.filename}
-              draggable={false}
-              className="max-w-full max-h-[90vh] object-contain select-none pointer-events-none rounded-lg shadow-2xl"
+            ✕
+          </button>
+          {/* Filename */}
+          <p className="text-white/60 text-xs mb-3 select-none">
+            {displayName(lightboxFile.filename)}
+          </p>
+          {/* Protected viewer with canvas + watermark + blur-on-tab-switch */}
+          <div onClick={(e) => e.stopPropagation()}>
+            <ProtectedImageViewer
+              shareId={shareId}
+              watermarkText="Preview only"
+              fileUrl={`/api/share/${shareId}/thumb?key=${encodeURIComponent(lightboxFile.key)}&v=20260620`}
             />
-            {/* Transparent overlay blocks right-click save */}
-            <div
-              className="absolute inset-0 rounded-lg"
-              onContextMenu={(e) => e.preventDefault()}
-            />
-            {/* Close button */}
-            <button
-              onClick={() => setLightboxFile(null)}
-              className="absolute -top-3 -right-3 w-8 h-8 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-lg transition-colors"
-            >
-              ×
-            </button>
-            {/* Filename */}
-            <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs text-center py-1.5 rounded-b-lg">
-              {displayName(lightboxFile.filename)}
-            </div>
           </div>
         </div>
       )}
