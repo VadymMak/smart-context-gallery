@@ -26,14 +26,45 @@ export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { fileKey, mode, expiresAt } = await request.json();
-
-  if (!fileKey || !mode) {
-    return NextResponse.json({ error: 'Missing fileKey or mode' }, { status: 400 });
-  }
+  const body = await request.json();
+  const { mode, expiresAt } = body;
 
   if (mode !== 'download' && mode !== 'preview') {
     return NextResponse.json({ error: 'mode must be "download" or "preview"' }, { status: 400 });
+  }
+
+  // ── Folder share ──────────────────────────────────────────────────────────
+  if (body.type === 'folder') {
+    const { folderPath, folderName } = body as { folderPath: string; folderName: string };
+    if (!folderPath || !folderName) {
+      return NextResponse.json({ error: 'Missing folderPath or folderName' }, { status: 400 });
+    }
+    // folderPath must be owned by the current user
+    const fullPrefix = `${user.id}/${folderPath}/`;
+    if (!fullPrefix.startsWith(`${user.id}/`)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const share = await createShare({
+      folderPath: fullPrefix,
+      fileName: folderName,
+      fileType: 'folder',
+      mode,
+      createdBy: user.id,
+      createdByName: user.displayName,
+      createdAt: new Date().toISOString(),
+      expiresAt: expiresAt || undefined,
+    });
+
+    const url = `${getOrigin(request)}/share/${share.id}`;
+    return NextResponse.json({ share, url });
+  }
+
+  // ── File share ────────────────────────────────────────────────────────────
+  const { fileKey } = body as { fileKey: string };
+
+  if (!fileKey) {
+    return NextResponse.json({ error: 'Missing fileKey or mode' }, { status: 400 });
   }
 
   // Security: fileKey must belong to current user

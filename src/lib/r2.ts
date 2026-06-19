@@ -146,6 +146,36 @@ export async function listAllFolderPaths(userId?: string): Promise<string[]> {
   return Array.from(folderPaths).sort();
 }
 
+export interface FolderFile {
+  key: string;
+  filename: string;
+  size: number;
+  lastModified: Date;
+}
+
+// Lists all non-system files under a full R2 prefix (e.g. "user_123/TRUBARKA/")
+export async function listFolderFiles(folderPrefix: string): Promise<FolderFile[]> {
+  const prefix = folderPrefix.endsWith('/') ? folderPrefix : `${folderPrefix}/`;
+  const command = new ListObjectsV2Command({ Bucket: BUCKET, Prefix: prefix });
+  const response = await r2.send(command);
+  const objects = response.Contents || [];
+
+  return objects
+    .filter((obj) => {
+      if (!obj.Key || obj.Key.endsWith('/')) return false;
+      const filename = obj.Key.split('/').pop() || '';
+      if (filename.startsWith('_')) return false;
+      return true;
+    })
+    .map((obj) => ({
+      key: obj.Key!,
+      filename: obj.Key!.split('/').pop()!,
+      size: obj.Size || 0,
+      lastModified: obj.LastModified || new Date(),
+    }))
+    .sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
+}
+
 export async function listFolders(userId?: string): Promise<string[]> {
   const prefix = userId ? `${userId}/` : '';
   const command = new ListObjectsV2Command({

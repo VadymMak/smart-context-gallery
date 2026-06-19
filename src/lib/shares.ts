@@ -4,9 +4,10 @@ import { nanoid } from 'nanoid';
 
 export interface Share {
   id: string;
-  fileKey: string;
+  fileKey?: string;       // file shares
+  folderPath?: string;    // folder shares — full R2 prefix, e.g. "user_123/TRUBARKA/"
   fileName: string;
-  fileType: 'image' | 'video' | 'document';
+  fileType: 'image' | 'video' | 'document' | 'folder';
   mode: 'download' | 'preview';
   createdBy: string;
   createdByName: string;

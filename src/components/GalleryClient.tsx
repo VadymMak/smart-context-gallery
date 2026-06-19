@@ -5,6 +5,7 @@ import type { GalleryImage } from '@/lib/r2';
 import type { ImageMetadata } from '@/lib/metadata';
 import type { Share } from '@/lib/shares';
 import { ShareModal } from '@/components/ShareModal';
+import { FolderShareModal } from '@/components/FolderShareModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1121,6 +1122,7 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
 
   // Share state
   const [shareFile, setShareFile] = useState<GalleryImage | null>(null);
+  const [shareFolderPath, setShareFolderPath] = useState<string | null>(null);
 
   // My Shares panel
   const [showMyShares, setShowMyShares] = useState(false);
@@ -1580,8 +1582,8 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
     setShareFile(image);
   }, []);
 
-  const handleShareFolder = useCallback((_folderPath: string) => {
-    // Folder sharing not supported in new share system
+  const handleShareFolder = useCallback((folderPath: string) => {
+    setShareFolderPath(folderPath);
   }, []);
 
   const fetchMyShares = useCallback(async () => {
@@ -2066,11 +2068,20 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
         />
       )}
 
-      {/* Share modal */}
+      {/* Share modal — file */}
       {shareFile && (
         <ShareModal
           file={shareFile}
           onClose={() => setShareFile(null)}
+        />
+      )}
+
+      {/* Share modal — folder */}
+      {shareFolderPath && (
+        <FolderShareModal
+          folderPath={shareFolderPath}
+          folderName={shareFolderPath.split('/').pop() || shareFolderPath}
+          onClose={() => setShareFolderPath(null)}
         />
       )}
 
