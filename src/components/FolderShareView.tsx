@@ -391,7 +391,7 @@ export function FolderShareView({ shareId, folderName, mode }: Props) {
               <ProtectedImageViewer
                 shareId={shareId}
                 watermarkText="Preview only"
-                fileUrl={`/api/share/${shareId}/thumb?key=${encodeURIComponent(lightboxFile.key)}&sz=${lightboxFile.size}`}
+                fileUrl={`/api/share/${shareId}/img-preview?key=${encodeURIComponent(lightboxFile.key)}&sz=${lightboxFile.size}`}
               />
             </div>
           </div>
