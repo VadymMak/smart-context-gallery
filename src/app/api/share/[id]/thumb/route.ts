@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import sharp from 'sharp';
+import exifr from 'exifr';
 import { getShareById, isShareExpired } from '@/lib/shares';
 import { r2, BUCKET } from '@/lib/r2';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
@@ -38,8 +39,8 @@ export async function GET(
     obj = await r2.send(new GetObjectCommand({
       Bucket: BUCKET,
       Key: key,
-      // For RAW, first 3 MB always covers the embedded JPEG preview
-      ...(isRaw && { Range: 'bytes=0-3145727' }),
+      // For RAW, first 2 MB always covers the embedded JPEG preview
+      ...(isRaw && { Range: 'bytes=0-2097151' }),
     }));
   } catch {
     return new Response('Not found', { status: 404 });
@@ -51,9 +52,9 @@ export async function GET(
 
   let inputBuffer: Buffer = fileBuffer;
   if (isRaw) {
-    const embedded = extractLargestJpeg(fileBuffer);
+    const embedded = await exifr.thumbnail(fileBuffer);
     if (!embedded) return new Response(null, { status: 204 });
-    inputBuffer = embedded;
+    inputBuffer = Buffer.from(toArrayBuffer(embedded));
   }
 
   let thumbBuffer: Buffer;
@@ -73,27 +74,4 @@ export async function GET(
       'Cache-Control': 'public, max-age=604800, immutable',
     },
   });
-}
-
-function extractLargestJpeg(buffer: Buffer): Buffer | null {
-  let best: Buffer | null = null;
-  let pos = 0;
-
-  while (pos < buffer.length - 3) {
-    const soi = buffer.indexOf(0xff, pos);
-    if (soi === -1 || soi + 2 >= buffer.length) break;
-    if (buffer[soi + 1] !== 0xd8 || buffer[soi + 2] !== 0xff) {
-      pos = soi + 1;
-      continue;
-    }
-    const eoi = buffer.indexOf(Buffer.from([0xff, 0xd9]), soi + 3);
-    if (eoi === -1) { pos = soi + 1; continue; }
-    const len = eoi + 2 - soi;
-    if (!best || len > best.length) {
-      const slice = buffer.subarray(soi, eoi + 2);
-      best = Buffer.from(toArrayBuffer(slice));
-    }
-    pos = eoi + 2;
-  }
-  return best;
 }

@@ -4,10 +4,15 @@ import { r2, BUCKET } from '@/lib/r2';
 import { getShareById, isShareExpired } from '@/lib/shares';
 import { getCurrentUser } from '@/lib/auth';
 import sharp from 'sharp';
+import exifr from 'exifr';
 
 const RAW_EXTS = new Set(['cr2', 'cr3', 'nef', 'arw', 'dng', 'raf', 'rw2', 'orf', 'pef']);
 // 2 MB range request covers embedded JPEG in virtually all CR2/RAW files
 const RAW_RANGE = 'bytes=0-2097151';
+
+function toArrayBuffer(u8: Uint8Array<ArrayBufferLike>): ArrayBuffer {
+  return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
@@ -63,7 +68,7 @@ export async function GET(req: NextRequest) {
     });
     const obj = await r2.send(cmd);
     if (!obj.Body) return new Response('Not found', { status: 404 });
-    fileBuffer = Buffer.from(await obj.Body.transformToByteArray());
+    fileBuffer = Buffer.from(toArrayBuffer(await obj.Body.transformToByteArray()));
   } catch {
     return new Response('Not found', { status: 404 });
   }
@@ -71,9 +76,9 @@ export async function GET(req: NextRequest) {
   // ── Generate thumbnail ────────────────────────────────────────────────────
   let source: Buffer = fileBuffer;
   if (isRaw) {
-    const embedded = extractEmbeddedJpeg(fileBuffer);
-    if (embedded) source = embedded;
-    // If no embedded JPEG found, try sharp directly on the raw bytes (may fail)
+    const embedded = await exifr.thumbnail(fileBuffer);
+    if (!embedded) return new Response(null, { status: 204 });
+    source = Buffer.from(toArrayBuffer(embedded));
   }
 
   let thumbBuffer: Buffer;
@@ -83,7 +88,6 @@ export async function GET(req: NextRequest) {
       .webp({ quality: 75 })
       .toBuffer();
   } catch {
-    // Cannot generate thumbnail (unsupported format / corrupt file)
     return new Response(null, { status: 204 });
   }
 
@@ -96,44 +100,10 @@ export async function GET(req: NextRequest) {
     Metadata: { 'source-key': key },
   })).catch(() => {});
 
-  // Extract a true ArrayBuffer (TS 5.9 requires this, Buffer/Uint8Array have ArrayBufferLike)
-  const ab = thumbBuffer.buffer.slice(thumbBuffer.byteOffset, thumbBuffer.byteOffset + thumbBuffer.byteLength);
-  return new Response(ab as ArrayBuffer, {
+  return new Response(toArrayBuffer(thumbBuffer), {
     headers: {
       'Content-Type': 'image/webp',
       'Cache-Control': 'public, max-age=31536000, immutable',
     },
   });
-}
-
-/**
- * Scan buffer for embedded JPEG segments (SOI…EOI).
- * Returns the largest one — in CR2 files this is the full-size preview JPEG.
- */
-function extractEmbeddedJpeg(buffer: Buffer): Buffer | null {
-  let best: Buffer | null = null;
-  let pos = 0;
-
-  while (pos < buffer.length - 3) {
-    // Locate SOI: FF D8 FF
-    const soi = buffer.indexOf(0xff, pos);
-    if (soi === -1 || soi + 2 >= buffer.length) break;
-    if (buffer[soi + 1] !== 0xd8 || buffer[soi + 2] !== 0xff) {
-      pos = soi + 1;
-      continue;
-    }
-
-    // Locate EOI: FF D9
-    const eoi = buffer.indexOf(Buffer.from([0xff, 0xd9]), soi + 3);
-    if (eoi === -1) { pos = soi + 1; continue; }
-
-    const len = eoi + 2 - soi;
-    if (!best || len > best.length) {
-      // Copy to avoid keeping a reference to the large source buffer
-      best = Buffer.from(buffer.subarray(soi, eoi + 2));
-    }
-    pos = eoi + 2;
-  }
-
-  return best;
 }
