@@ -76,8 +76,13 @@ export async function GET(req: NextRequest) {
   // ── Generate thumbnail ────────────────────────────────────────────────────
   let source: Buffer = fileBuffer;
   if (isRaw) {
-    const embedded = await exifr.thumbnail(fileBuffer);
-    if (!embedded) return new Response(null, { status: 204 });
+    let embedded: Uint8Array | undefined;
+    try {
+      embedded = await exifr.thumbnail(fileBuffer);
+    } catch (err) {
+      console.warn('[thumb] exifr.thumbnail failed:', err);
+    }
+    if (!embedded || embedded.length < 100) return new Response(null, { status: 204 });
     source = Buffer.from(toArrayBuffer(embedded));
   }
 
