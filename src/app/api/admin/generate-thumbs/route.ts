@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { ListObjectsV2Command, GetObjectCommand, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { r2, BUCKET } from '@/lib/r2';
 import { getCurrentUser } from '@/lib/auth';
-import { extractRawThumbnail } from '@/lib/raw-thumb';
+import { extractRawThumbnail, toWebpThumb, toWebpPreview } from '@/lib/raw-thumb';
 
 export const maxDuration = 300;
 
@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
   // userId: from query param, then session, then all-bucket scan (no prefix)
   const userIdParam = req.nextUrl.searchParams.get('userId');
   const userId = userIdParam ?? user?.id ?? null;
+  const force = req.nextUrl.searchParams.get('force') === 'true';
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -56,20 +57,25 @@ export async function GET(req: NextRequest) {
           token = list.NextContinuationToken;
         } while (token);
 
-        send(`Found ${allKeys.length} RAW files. Starting thumbnail generation...`);
+        send(`Found ${allKeys.length} RAW files. Starting thumbnail generation${force ? ' (force mode)' : ''}...`);
 
         let done = 0, skipped = 0, errors = 0;
 
         for (const key of allKeys) {
-          const cacheKey = `_thumbs/${key}.jpg`;
+          const thumbKey   = `_thumbs/${key}.webp`;
+          const previewKey = `_previews/${key}.webp`;
+          const rawKey     = `_raws/${key}.jpg`;
 
-          // Skip if already cached
-          try {
-            await r2.send(new HeadObjectCommand({ Bucket: BUCKET, Key: cacheKey }));
-            skipped++;
-            if (skipped % 20 === 0) send(`Skipped ${skipped} already cached`);
-            continue;
-          } catch { /* not cached — generate */ }
+          // Skip if all 3 versions already cached (unless force=true)
+          if (!force) {
+            const head = (k: string) => r2.send(new HeadObjectCommand({ Bucket: BUCKET, Key: k })).then(() => true).catch(() => false);
+            const [hasThumb, hasPreview, hasRaw] = await Promise.all([head(thumbKey), head(previewKey), head(rawKey)]);
+            if (hasThumb && hasPreview && hasRaw) {
+              skipped++;
+              if (skipped % 20 === 0) send(`Skipped ${skipped} already cached`);
+              continue;
+            }
+          }
 
           try {
             const obj = await r2.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
@@ -77,23 +83,24 @@ export async function GET(req: NextRequest) {
 
             const fileBuffer = Buffer.from(toArrayBuffer(await obj.Body.transformToByteArray()));
 
-            const thumb = extractRawThumbnail(fileBuffer);
-            if (!thumb) {
+            const embedded = extractRawThumbnail(fileBuffer);
+            if (!embedded) {
               send(`WARN No embedded JPEG: ${key}`);
               errors++;
               continue;
             }
 
-            await r2.send(new PutObjectCommand({
-              Bucket: BUCKET,
-              Key: cacheKey,
-              Body: thumb,
-              ContentType: 'image/jpeg',
-              Metadata: { 'source-key': key },
-            }));
+            const [thumb, preview] = await Promise.all([toWebpThumb(embedded), toWebpPreview(embedded)]);
+
+            const saves = [
+              thumb && r2.send(new PutObjectCommand({ Bucket: BUCKET, Key: thumbKey,   Body: thumb,    ContentType: 'image/webp', Metadata: { 'source-key': key } })),
+              preview && r2.send(new PutObjectCommand({ Bucket: BUCKET, Key: previewKey, Body: preview, ContentType: 'image/webp', Metadata: { 'source-key': key } })),
+              r2.send(new PutObjectCommand({ Bucket: BUCKET, Key: rawKey, Body: embedded, ContentType: 'image/jpeg', Metadata: { 'source-key': key } })),
+            ].filter(Boolean) as Promise<unknown>[];
+            await Promise.all(saves);
 
             done++;
-            send(`OK ${done}/${allKeys.length - skipped} — ${key.split('/').pop()} (${Math.round(thumb.length / 1024)}KB)`);
+            send(`OK ${done}/${allKeys.length - skipped} — ${key.split('/').pop()} thumb=${Math.round((thumb?.length ?? 0) / 1024)}KB preview=${Math.round((preview?.length ?? 0) / 1024)}KB`);
 
           } catch (err) {
             send(`ERROR: ${key} — ${err instanceof Error ? err.message : String(err)}`);
