@@ -3,7 +3,7 @@ import sharp from 'sharp';
 import exifr from 'exifr';
 import { getShareById, isShareExpired } from '@/lib/shares';
 import { r2, BUCKET } from '@/lib/r2';
-import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'heic']);
 const RAW_EXTS   = new Set(['cr2', 'cr3', 'nef', 'arw', 'dng', 'raf', 'rw2', 'orf', 'pef']);
@@ -34,14 +34,26 @@ export async function GET(
     return new Response('Not an image', { status: 400 });
   }
 
+  // ── Cache hit — same key used by /api/thumb so cache is shared ──────────
+  const thumbKey = `_thumbs/${key}.webp`;
+  try {
+    const cached = await r2.send(new GetObjectCommand({ Bucket: BUCKET, Key: thumbKey }));
+    if (cached.Body) {
+      return new Response(cached.Body.transformToWebStream(), {
+        headers: {
+          'Content-Type': 'image/webp',
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      });
+    }
+  } catch {
+    // cache miss — continue
+  }
+
+  // ── Fetch full file from R2 (no Range — CR2 preview can sit past 3 MB) ──
   let obj;
   try {
-    obj = await r2.send(new GetObjectCommand({
-      Bucket: BUCKET,
-      Key: key,
-      // For RAW, first 2 MB always covers the embedded JPEG preview
-      ...(isRaw && { Range: 'bytes=0-2097151' }),
-    }));
+    obj = await r2.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
   } catch {
     return new Response('Not found', { status: 404 });
   }
@@ -56,9 +68,12 @@ export async function GET(
     try {
       embedded = await exifr.thumbnail(fileBuffer);
     } catch (err) {
-      console.warn('[share/thumb] exifr.thumbnail failed:', err);
+      console.warn('[share/thumb] exifr.thumbnail failed for', key, ':', err);
     }
-    if (!embedded || embedded.length < 100) return new Response(null, { status: 204 });
+    if (!embedded || embedded.length < 100) {
+      console.warn('[share/thumb] No embedded JPEG in', key, '— file size:', fileBuffer.length);
+      return new Response(null, { status: 204 });
+    }
     inputBuffer = Buffer.from(toArrayBuffer(embedded));
   }
 
@@ -69,14 +84,23 @@ export async function GET(
       .webp({ quality: 75 })
       .toBuffer();
   } catch (err) {
-    console.error('[share/thumb] sharp error:', err);
+    console.error('[share/thumb] sharp error for', key, ':', err);
     return new Response(null, { status: 204 });
   }
+
+  // ── Write to cache (fire-and-forget) ────────────────────────────────────
+  r2.send(new PutObjectCommand({
+    Bucket: BUCKET,
+    Key: thumbKey,
+    Body: thumbBuffer,
+    ContentType: 'image/webp',
+    Metadata: { 'source-key': key },
+  })).catch(() => {});
 
   return new Response(toArrayBuffer(thumbBuffer), {
     headers: {
       'Content-Type': 'image/webp',
-      'Cache-Control': 'public, max-age=604800, immutable',
+      'Cache-Control': 'public, max-age=31536000, immutable',
     },
   });
 }

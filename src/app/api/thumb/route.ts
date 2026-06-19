@@ -7,8 +7,6 @@ import sharp from 'sharp';
 import exifr from 'exifr';
 
 const RAW_EXTS = new Set(['cr2', 'cr3', 'nef', 'arw', 'dng', 'raf', 'rw2', 'orf', 'pef']);
-// 2 MB range request covers embedded JPEG in virtually all CR2/RAW files
-const RAW_RANGE = 'bytes=0-2097151';
 
 function toArrayBuffer(u8: Uint8Array<ArrayBufferLike>): ArrayBuffer {
   return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
@@ -61,11 +59,8 @@ export async function GET(req: NextRequest) {
 
   let fileBuffer: Buffer;
   try {
-    const cmd = new GetObjectCommand({
-      Bucket: BUCKET,
-      Key: key,
-      ...(isRaw && { Range: RAW_RANGE }),
-    });
+    // No Range header — CR2 embedded preview can sit past the first few MB
+    const cmd = new GetObjectCommand({ Bucket: BUCKET, Key: key });
     const obj = await r2.send(cmd);
     if (!obj.Body) return new Response('Not found', { status: 404 });
     fileBuffer = Buffer.from(toArrayBuffer(await obj.Body.transformToByteArray()));
