@@ -3,7 +3,6 @@ import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { r2, BUCKET } from '@/lib/r2';
 import { getShareById, isShareExpired } from '@/lib/shares';
 import { getCurrentUser } from '@/lib/auth';
-import sharp from 'sharp';
 import { extractRawThumbnail } from '@/lib/raw-thumb';
 
 console.log('[thumb] MODULE LOADED');
@@ -126,14 +125,18 @@ export async function GET(req: NextRequest) {
     console.log('[thumb] Running sharp on', fileBuffer.length, 'bytes');
     let thumbBuffer: Buffer;
     try {
-      thumbBuffer = await sharp(fileBuffer)
+      const sharpModule = await import('sharp');
+      const sharpFn = sharpModule.default ?? sharpModule;
+      thumbBuffer = await sharpFn(fileBuffer)
         .resize(320, 240, { fit: 'inside', withoutEnlargement: true })
         .webp({ quality: 80 })
         .toBuffer();
       console.log('[thumb] WebP generated:', thumbBuffer.length, 'bytes');
     } catch (sharpErr) {
-      console.error('[thumb] sharp failed:', sharpErr);
-      return new Response(null, { status: 204 });
+      console.error('[thumb] sharp dynamic import failed:', sharpErr);
+      return new Response(toArrayBuffer(fileBuffer), {
+        headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=31536000' },
+      });
     }
 
     // Cache WebP (fire-and-forget)

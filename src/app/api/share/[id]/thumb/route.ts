@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server';
-import sharp from 'sharp';
 import { extractRawThumbnail } from '@/lib/raw-thumb';
 import { getShareById, isShareExpired } from '@/lib/shares';
 import { r2, BUCKET } from '@/lib/r2';
@@ -98,13 +97,17 @@ export async function GET(
   // ── Regular images: resize with sharp → WebP ────────────────────────────
   let thumbBuffer: Buffer;
   try {
-    thumbBuffer = await sharp(fileBuffer)
+    const sharpModule = await import('sharp');
+    const sharpFn = sharpModule.default ?? sharpModule;
+    thumbBuffer = await sharpFn(fileBuffer)
       .resize(320, 240, { fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 80 })
       .toBuffer();
   } catch (err) {
-    console.error('[share/thumb] sharp failed for', key, ':', err);
-    return new Response(null, { status: 204 });
+    console.error('[share/thumb] sharp dynamic import failed for', key, ':', err);
+    return new Response(fileBuffer, {
+      headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=31536000' },
+    });
   }
 
   r2.send(new PutObjectCommand({

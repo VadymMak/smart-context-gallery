@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getShareById, isShareExpired } from '@/lib/shares';
 import { r2, BUCKET } from '@/lib/r2';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
-import sharp from 'sharp';
 
 const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'heic', 'bmp']);
 
@@ -63,7 +62,9 @@ export async function GET(
     const bytes = await body.transformToByteArray();
     const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
     try {
-      const thumbBuf = await sharp(Buffer.from(ab))
+      const sharpModule = await import('sharp');
+      const sharpFn = sharpModule.default ?? sharpModule;
+      const thumbBuf = await sharpFn(Buffer.from(ab))
         .resize(400, 300, { fit: 'cover', position: 'centre' })
         .webp({ quality: 72 })
         .toBuffer();
