@@ -34,17 +34,18 @@ async function generateRawVersions(key: string): Promise<void> {
 
   // 2. Extract embedded JPEG
   const { extractRawThumbnail, toWebpThumb, toWebpPreview } = await import('@/lib/raw-thumb');
-  const embedded = extractRawThumbnail(fileBuffer);
-  if (!embedded) {
+  const extracted = extractRawThumbnail(fileBuffer);
+  if (!extracted) {
     console.warn('[generate] No embedded JPEG found for:', key);
     return;
   }
-  console.log('[generate] Embedded JPEG:', embedded.length, 'bytes');
+  const { jpeg: embedded, orientation } = extracted;
+  console.log('[generate] Embedded JPEG:', embedded.length, 'bytes, orientation:', orientation);
 
   // 3. Generate WebP versions in parallel
   const [thumb, preview] = await Promise.all([
-    toWebpThumb(embedded),
-    toWebpPreview(embedded),
+    toWebpThumb(embedded, orientation),
+    toWebpPreview(embedded, orientation),
   ]);
 
   // 4. Save all 3 versions in parallel

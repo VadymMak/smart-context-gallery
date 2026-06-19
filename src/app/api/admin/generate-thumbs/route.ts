@@ -83,14 +83,15 @@ export async function GET(req: NextRequest) {
 
             const fileBuffer = Buffer.from(toArrayBuffer(await obj.Body.transformToByteArray()));
 
-            const embedded = extractRawThumbnail(fileBuffer);
-            if (!embedded) {
+            const extracted = extractRawThumbnail(fileBuffer);
+            if (!extracted) {
               send(`WARN No embedded JPEG: ${key}`);
               errors++;
               continue;
             }
+            const { jpeg: embedded, orientation } = extracted;
 
-            const [thumb, preview] = await Promise.all([toWebpThumb(embedded), toWebpPreview(embedded)]);
+            const [thumb, preview] = await Promise.all([toWebpThumb(embedded, orientation), toWebpPreview(embedded, orientation)]);
 
             const saves = [
               thumb && r2.send(new PutObjectCommand({ Bucket: BUCKET, Key: thumbKey,   Body: thumb,    ContentType: 'image/webp', Metadata: { 'source-key': key } })),

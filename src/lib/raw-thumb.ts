@@ -21,7 +21,12 @@ function isStandardJpeg(buf: Buffer): boolean {
   return true; // no SOF found — optimistic, let sharp handle it
 }
 
-export function extractRawThumbnail(buffer: Buffer): Buffer | null {
+export interface ExtractResult {
+  jpeg: Buffer;
+  orientation: number; // EXIF tag 0x0112: 1=normal, 3=180°, 6=90°CW, 8=90°CCW
+}
+
+export function extractRawThumbnail(buffer: Buffer): ExtractResult | null {
   try {
     if (buffer.length < 8) return null;
 
@@ -32,7 +37,8 @@ export function extractRawThumbnail(buffer: Buffer): Buffer | null {
     const magic = readU16(2);
     if (magic !== 0x002a && magic !== 0x5243) {
       console.warn('[raw-thumb] Not TIFF/CR2, falling back to carving');
-      return byteCarve(buffer);
+      const carved = byteCarve(buffer);
+      return carved ? { jpeg: carved, orientation: 1 } : null;
     }
 
     // ── IFD walk with pending queue (handles SubIFDs via tag 0x014A) ─────────
@@ -40,6 +46,7 @@ export function extractRawThumbnail(buffer: Buffer): Buffer | null {
     const visited = new Set<number>();
     let bestJpeg: Buffer | null = null;
     let bestSize = 0;
+    let orientation = 1; // TIFF tag 0x0112, read from IFD0
 
     while (pending.length > 0) {
       const ifdOffset = pending.shift()!;
@@ -60,10 +67,11 @@ export function extractRawThumbnail(buffer: Buffer): Buffer | null {
         const nval = readU32(base + 4);
         const val  = readU32(base + 8);
 
-        if (tag === 0x0201) jpegOffset = val;    // JPEGInterchangeFormat
-        if (tag === 0x0202) jpegLength = val;    // JPEGInterchangeFormatLength
-        if (tag === 0x0111) stripOffset = val;   // StripOffsets
-        if (tag === 0x0117) stripLength = val;   // StripByteCounts
+        if (tag === 0x0112) orientation = readU16(base + 8); // Orientation (SHORT)
+        if (tag === 0x0201) jpegOffset = val;                // JPEGInterchangeFormat
+        if (tag === 0x0202) jpegLength = val;                // JPEGInterchangeFormatLength
+        if (tag === 0x0111) stripOffset = val;               // StripOffsets
+        if (tag === 0x0117) stripLength = val;               // StripByteCounts
 
         // SubIFD pointer (tag 0x014A): value is an array of offsets
         if (tag === 0x014a && type === 4 /* LONG */ && nval <= 8) {
@@ -115,10 +123,14 @@ export function extractRawThumbnail(buffer: Buffer): Buffer | null {
       }
     }
 
-    if (bestJpeg) return bestJpeg;
+    if (bestJpeg) {
+      console.log('[raw-thumb] orientation:', orientation);
+      return { jpeg: bestJpeg, orientation };
+    }
 
     console.warn('[raw-thumb] IFD found nothing, trying byte carving');
-    return byteCarve(buffer);
+    const carved = byteCarve(buffer);
+    return carved ? { jpeg: carved, orientation: 1 } : null;
   } catch (err) {
     console.error('[raw-thumb] error:', err);
     return null;
@@ -153,14 +165,24 @@ function byteCarve(buffer: Buffer): Buffer | null {
   return best;
 }
 
+function orientationToDeg(orientation: number): number {
+  if (orientation === 6) return 90;
+  if (orientation === 8) return 270;
+  if (orientation === 3) return 180;
+  return 0;
+}
+
 /** Convert embedded JPEG → WebP thumbnail (400x300, grid quality) */
-export async function toWebpThumb(jpegBuffer: Buffer): Promise<Buffer | null> {
+export async function toWebpThumb(jpegBuffer: Buffer, orientation = 1): Promise<Buffer | null> {
   try {
     const sharpMod = await import('sharp');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sharp = (sharpMod as any).default ?? sharpMod;
-    return await sharp(jpegBuffer)
-      .rotate()
+    const deg = orientationToDeg(orientation);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let pipeline: any = sharp(jpegBuffer);
+    if (deg !== 0) pipeline = pipeline.rotate(deg);
+    return await pipeline
       .resize(400, 300, { fit: 'cover', position: 'centre' })
       .webp({ quality: 75 })
       .toBuffer();
@@ -171,13 +193,16 @@ export async function toWebpThumb(jpegBuffer: Buffer): Promise<Buffer | null> {
 }
 
 /** Convert embedded JPEG → WebP preview (1200px max, lightbox quality) */
-export async function toWebpPreview(jpegBuffer: Buffer): Promise<Buffer | null> {
+export async function toWebpPreview(jpegBuffer: Buffer, orientation = 1): Promise<Buffer | null> {
   try {
     const sharpMod = await import('sharp');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sharp = (sharpMod as any).default ?? sharpMod;
-    return await sharp(jpegBuffer)
-      .rotate()
+    const deg = orientationToDeg(orientation);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let pipeline: any = sharp(jpegBuffer);
+    if (deg !== 0) pipeline = pipeline.rotate(deg);
+    return await pipeline
       .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 85 })
       .toBuffer();

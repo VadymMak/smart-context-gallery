@@ -68,14 +68,15 @@ export async function GET(req: NextRequest) {
 
     if (isRaw) {
       // CR2: extract embedded JPEG → WebP via sharp@0.34.5
-      const embedded = extractRawThumbnail(fileBuffer);
-      if (!embedded) {
+      const extracted = extractRawThumbnail(fileBuffer);
+      if (!extracted) {
         console.warn('[thumb] No embedded JPEG:', key);
         return new Response(null, { status: 204 });
       }
-      console.log('[thumb] Embedded JPEG:', embedded.length, 'bytes');
+      const { jpeg: embedded, orientation } = extracted;
+      console.log('[thumb] Embedded JPEG:', embedded.length, 'bytes, orientation:', orientation);
 
-      const webp = await toWebpThumb(embedded);
+      const webp = await toWebpThumb(embedded, orientation);
       if (webp) {
         thumbnail = webp;
         console.log('[thumb] WebP thumb:', thumbnail.length, 'bytes');

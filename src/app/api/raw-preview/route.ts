@@ -46,16 +46,16 @@ export async function GET(req: NextRequest) {
   const fileBuffer = Buffer.from(toArrayBuffer(await obj.Body.transformToByteArray()));
 
   // ── Extract embedded JPEG ────────────────────────────────────────────────
-  const embedded = extractRawThumbnail(fileBuffer);
-  if (!embedded) {
+  const extracted = extractRawThumbnail(fileBuffer);
+  if (!extracted) {
     console.warn('[raw-preview] No embedded JPEG in:', key, 'size:', fileBuffer.length);
     return new Response(null, { status: 204 });
   }
-
-  console.log('[raw-preview] Embedded JPEG:', embedded.length, 'bytes for:', key);
+  const { jpeg: embedded, orientation } = extracted;
+  console.log('[raw-preview] Embedded JPEG:', embedded.length, 'bytes, orientation:', orientation, 'for:', key);
 
   // ── Convert to WebP (1200px, lightbox quality) ───────────────────────────
-  const webp = await toWebpPreview(embedded);
+  const webp = await toWebpPreview(embedded, orientation);
   const output = webp ?? embedded; // fallback to JPEG if sharp fails
   const contentType = webp ? 'image/webp' : 'image/jpeg';
 
