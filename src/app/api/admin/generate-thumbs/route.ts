@@ -23,8 +23,9 @@ export async function GET(req: NextRequest) {
     return new Response('Forbidden', { status: 403 });
   }
 
-  // Optional: scope to one user prefix via ?userId=
-  const userId = req.nextUrl.searchParams.get('userId') ?? user?.id ?? '';
+  // userId: from query param, then session, then all-bucket scan (no prefix)
+  const userIdParam = req.nextUrl.searchParams.get('userId');
+  const userId = userIdParam ?? user?.id ?? null;
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -32,7 +33,11 @@ export async function GET(req: NextRequest) {
       const send = (msg: string) => controller.enqueue(enc.encode(msg + '\n'));
 
       try {
-        send(`Listing RAW files for userId: ${userId} ...`);
+        const prefix = userId ? `${userId}/` : '';
+        send(prefix
+          ? `Listing RAW files for userId: ${userId} ...`
+          : 'Listing ALL RAW files in bucket ...'
+        );
 
         // ── List all RAW files in R2 ─────────────────────────────────────────
         const allKeys: string[] = [];
@@ -40,7 +45,7 @@ export async function GET(req: NextRequest) {
         do {
           const list = await r2.send(new ListObjectsV2Command({
             Bucket: BUCKET,
-            Prefix: `${userId}/`,
+            Prefix: prefix || undefined,
             ContinuationToken: token,
           }));
           for (const obj of list.Contents ?? []) {
