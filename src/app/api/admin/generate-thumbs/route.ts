@@ -13,13 +13,18 @@ function toArrayBuffer(u8: Uint8Array<ArrayBufferLike>): ArrayBuffer {
 }
 
 export async function GET(req: NextRequest) {
+  const secret = req.nextUrl.searchParams.get('secret');
+  const secretOk = process.env.ADMIN_SECRET && secret === process.env.ADMIN_SECRET;
+
   const user = await getCurrentUser();
-  if (!user || user.role !== 'admin') {
+  const sessionOk = !!user && user.role === 'admin';
+
+  if (!secretOk && !sessionOk) {
     return new Response('Forbidden', { status: 403 });
   }
 
   // Optional: scope to one user prefix via ?userId=
-  const userId = req.nextUrl.searchParams.get('userId') ?? user.id;
+  const userId = req.nextUrl.searchParams.get('userId') ?? user?.id ?? '';
 
   const stream = new ReadableStream({
     async start(controller) {
