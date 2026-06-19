@@ -160,6 +160,7 @@ export async function toWebpThumb(jpegBuffer: Buffer): Promise<Buffer | null> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sharp = (sharpMod as any).default ?? sharpMod;
     return await sharp(jpegBuffer)
+      .rotate()
       .resize(400, 300, { fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 75 })
       .toBuffer();
@@ -176,6 +177,7 @@ export async function toWebpPreview(jpegBuffer: Buffer): Promise<Buffer | null> 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sharp = (sharpMod as any).default ?? sharpMod;
     return await sharp(jpegBuffer)
+      .rotate()
       .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 85 })
       .toBuffer();
