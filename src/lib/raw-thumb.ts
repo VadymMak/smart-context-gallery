@@ -1,18 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const dcraw = require('dcraw');
-
 export async function extractRawThumbnail(buffer: Buffer): Promise<Buffer | null> {
-  // Strategy 1: dcraw WASM — reliable for all Canon CR2, Nikon NEF, etc.
-  try {
-    const result: Buffer | Uint8Array = dcraw(buffer, { extractThumbnail: true });
-    if (result && result.length > 1000) {
-      return Buffer.isBuffer(result) ? result : Buffer.from(result);
-    }
-  } catch (err) {
-    console.warn('[raw-thumb] dcraw failed:', (err as Error).message);
-  }
-
-  // Strategy 2: Manual JPEG carving — scan for largest embedded JPEG segment
   return extractLargestJpeg(buffer);
 }
 

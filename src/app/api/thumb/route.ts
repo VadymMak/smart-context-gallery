@@ -6,6 +6,8 @@ import { getCurrentUser } from '@/lib/auth';
 import sharp from 'sharp';
 import { extractRawThumbnail } from '@/lib/raw-thumb';
 
+console.log('[thumb] MODULE LOADED');
+
 const RAW_EXTS = new Set(['cr2', 'cr3', 'nef', 'arw', 'dng', 'raf', 'rw2', 'orf', 'pef']);
 
 function toArrayBuffer(u8: Uint8Array<ArrayBufferLike>): ArrayBuffer {
@@ -13,6 +15,7 @@ function toArrayBuffer(u8: Uint8Array<ArrayBufferLike>): ArrayBuffer {
 }
 
 export async function GET(req: NextRequest) {
+  console.log('[thumb] HANDLER CALLED');
   const { searchParams } = req.nextUrl;
   const key     = searchParams.get('key');
   const shareId = searchParams.get('shareId');
