@@ -173,7 +173,7 @@ export default async function SharePage({ params }: Props) {
             </>
           )}
 
-          {/* Download mode — RAW image: converted WebP preview + download original */}
+          {/* Download mode — RAW image: converted WebP preview + 3 download options */}
           {!isPreview && isRaw && (
             <div className="flex flex-col items-center gap-6">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -185,16 +185,29 @@ export default async function SharePage({ params }: Props) {
               <p className="text-white/40 text-sm">
                 Showing converted preview. Download original for Lightroom / Camera Raw.
               </p>
-              <a
-                href={`/api/share/${id}/file?download=1`}
-                download={share.fileName}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors shadow-lg"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
-                </svg>
-                ⬇ Download original {share.fileName.split('.').pop()?.toUpperCase()} (12+ MB RAW)
-              </a>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <a
+                  href={`/api/share/${id}/img-preview?key=${encodeURIComponent(share.fileKey ?? '')}&download=1`}
+                  download={share.fileName.replace(/\.[^.]+$/, '.webp')}
+                  className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                >
+                  ⬇ Download WebP <span className="text-green-200 text-xs">(~300KB, fast)</span>
+                </a>
+                <a
+                  href={`/api/share/${id}/raw-jpeg?key=${encodeURIComponent(share.fileKey ?? '')}&download=1`}
+                  download={share.fileName.replace(/\.[^.]+$/, '.jpg')}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                >
+                  ⬇ Download JPEG <span className="text-blue-200 text-xs">(~2MB, universal)</span>
+                </a>
+                <a
+                  href={`/api/share/${id}/file?download=1`}
+                  download={share.fileName}
+                  className="px-5 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                >
+                  ⬇ Original {share.fileName.split('.').pop()?.toUpperCase()} <span className="text-gray-400 text-xs">(12+ MB RAW)</span>
+                </a>
+              </div>
             </div>
           )}
 

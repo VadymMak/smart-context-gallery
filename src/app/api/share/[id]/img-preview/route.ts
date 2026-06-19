@@ -11,6 +11,13 @@ function toArrayBuffer(u8: Uint8Array<ArrayBufferLike>): ArrayBuffer {
   return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
 }
 
+function disposition(key: string, contentType: string, download: boolean): string | undefined {
+  if (!download) return undefined;
+  const ext = contentType === 'image/jpeg' ? '.jpg' : '.webp';
+  const name = (key.split('/').pop() ?? 'preview').replace(/\.[^.]+$/, ext);
+  return `attachment; filename="${name}"`;
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -35,8 +42,9 @@ export async function GET(
     key = share.fileKey;
   }
 
-  const ext   = key.split('.').pop()?.toLowerCase() ?? '';
-  const isRaw = RAW_EXTS.has(ext);
+  const ext     = key.split('.').pop()?.toLowerCase() ?? '';
+  const isRaw   = RAW_EXTS.has(ext);
+  const download = req.nextUrl.searchParams.get('download') === '1';
   if (!IMAGE_EXTS.has(ext) && !isRaw) {
     return new Response('Not an image', { status: 400 });
   }
@@ -56,12 +64,14 @@ export async function GET(
       if (cached.Body) {
         const contentType = cacheKey.endsWith('.jpg') ? 'image/jpeg' : 'image/webp';
         const etag = cached.ETag ?? `"${cacheKey}"`;
+        const disp = disposition(key, contentType, download);
         return new Response(cached.Body.transformToWebStream(), {
           headers: {
             'Content-Type': contentType,
             'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
             'ETag': etag,
             'Vary': 'Accept',
+            ...(disp ? { 'Content-Disposition': disp } : {}),
           },
         });
       }
@@ -103,12 +113,14 @@ export async function GET(
       Metadata: { 'source-key': key },
     })).catch(() => {});
 
+    const disp = disposition(key, contentType, download);
     return new Response(toArrayBuffer(body), {
       headers: {
         'Content-Type': contentType,
         'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
         'ETag': `"${key}-${body.length}"`,
         'Vary': 'Accept',
+        ...(disp ? { 'Content-Disposition': disp } : {}),
       },
     });
   }
@@ -137,12 +149,14 @@ export async function GET(
     Metadata: { 'source-key': key },
   })).catch(() => {});
 
+  const disp = disposition(key, 'image/webp', download);
   return new Response(toArrayBuffer(previewBuffer), {
     headers: {
       'Content-Type': 'image/webp',
       'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
       'ETag': `"${key}-${previewBuffer.length}"`,
       'Vary': 'Accept',
+      ...(disp ? { 'Content-Disposition': disp } : {}),
     },
   });
 }
