@@ -106,7 +106,7 @@ function GridCard({
 
         {/* RAW badge */}
         {file.isRaw && (
-          <span className="absolute top-1.5 right-1.5 bg-black/60 text-white text-[10px] font-bold px-1.5 py-0.5 rounded z-10">
+          <span className="absolute top-1.5 right-1.5 bg-black/60 text-white text-[10px] font-bold px-1.5 py-0.5 rounded z-[1]">
             RAW
           </span>
         )}
