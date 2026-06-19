@@ -26,8 +26,8 @@ export async function GET() {
     // embed a minimal JPEG
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, ...new Array(60_000).fill(0xab), 0xff, 0xd9]);
     jpeg.copy(fakeRaw, 10_000);
-    const result = await extractRawThumbnail(fakeRaw);
-    results.jpegCarving = result ? `ok (${result.length} bytes)` : 'null';
+    const result = extractRawThumbnail(fakeRaw);
+    results.jpegCarving = result ? `ok (${result.jpeg.length} bytes, orientation: ${result.orientation})` : 'null';
   } catch (err) {
     results.jpegCarving = `ERROR: ${String(err)}`;
   }

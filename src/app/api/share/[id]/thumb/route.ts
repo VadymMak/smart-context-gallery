@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { extractRawThumbnail } from '@/lib/raw-thumb';
+import { extractRawThumbnail, toWebpThumb } from '@/lib/raw-thumb';
 import { getShareById, isShareExpired } from '@/lib/shares';
 import { r2, BUCKET } from '@/lib/r2';
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
@@ -66,29 +66,35 @@ export async function GET(
 
   const fileBuffer = Buffer.from(toArrayBuffer(await obj.Body.transformToByteArray()));
 
-  // ── CR2/RAW: return embedded JPEG directly (no sharp) ──────────────────
+  // ── CR2/RAW: extract embedded JPEG → WebP ─────────────────────────────
   if (isRaw) {
     console.log('[share/thumb] CR2/RAW processing, file size:', fileBuffer.length);
-    const embedded = extractRawThumbnail(fileBuffer);
+    const extracted = extractRawThumbnail(fileBuffer);
 
-    if (!embedded) {
+    if (!extracted) {
       console.warn('[share/thumb] No embedded JPEG in', key);
       return new Response(null, { status: 204 });
     }
 
-    console.log('[share/thumb] Returning embedded JPEG:', embedded.length, 'bytes');
+    const { jpeg: embedded, orientation } = extracted;
+    console.log('[share/thumb] Embedded JPEG:', embedded.length, 'bytes, orientation:', orientation);
+
+    const webp = await toWebpThumb(embedded, orientation);
+    const body = webp ?? embedded;
+    const contentType = webp ? 'image/webp' : 'image/jpeg';
+    const saveKey = webp ? webpKey : jpegKey;
 
     r2.send(new PutObjectCommand({
       Bucket: BUCKET,
-      Key: jpegKey,
-      Body: embedded,
-      ContentType: 'image/jpeg',
+      Key: saveKey,
+      Body: body,
+      ContentType: contentType,
       Metadata: { 'source-key': key },
     })).catch(() => {});
 
-    return new Response(toArrayBuffer(embedded), {
+    return new Response(toArrayBuffer(body), {
       headers: {
-        'Content-Type': 'image/jpeg',
+        'Content-Type': contentType,
         'Cache-Control': 'public, max-age=31536000, immutable',
       },
     });
