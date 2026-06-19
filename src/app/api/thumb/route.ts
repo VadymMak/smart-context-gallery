@@ -89,36 +89,27 @@ export async function GET(req: NextRequest) {
     // ── Generate thumbnail ──────────────────────────────────────────────────
     let source: Buffer = fileBuffer;
     if (isRaw) {
-      console.log('[thumb] Processing CR2/RAW, file size:', fileBuffer.length);
+      console.log('[thumb] Starting CR2 processing for:', key, 'buffer:', fileBuffer.length);
       const embedded = await extractRawThumbnail(fileBuffer);
 
       if (!embedded) {
-        console.warn('[thumb] No embedded JPEG found in:', key);
+        console.warn('[thumb] extractRawThumbnail returned null for:', key);
         return new Response(null, { status: 204 });
       }
-      if (embedded[0] !== 0xff || embedded[1] !== 0xd8) {
-        console.warn('[thumb] Bad JPEG header');
-        return new Response(null, { status: 204 });
-      }
-      console.log('[thumb] Embedded JPEG found:', embedded.length, 'bytes');
       source = embedded;
     }
 
+    console.log('[thumb] Running sharp on', source.length, 'bytes');
     let thumbBuffer: Buffer;
     try {
       thumbBuffer = await sharp(source)
         .resize(320, 240, { fit: 'inside', withoutEnlargement: true })
         .webp({ quality: 80 })
         .toBuffer();
-      console.log('[thumb] Sharp webp done:', thumbBuffer.length, 'bytes');
+      console.log('[thumb] WebP generated:', thumbBuffer.length, 'bytes');
     } catch (sharpErr) {
-      console.warn('[thumb] sharp failed:', sharpErr);
-      try {
-        thumbBuffer = await sharp(source).webp({ quality: 70 }).toBuffer();
-      } catch {
-        console.error('[thumb] sharp total fail, returning 204');
-        return new Response(null, { status: 204 });
-      }
+      console.error('[thumb] sharp failed:', sharpErr);
+      return new Response(null, { status: 204 });
     }
 
     // ── Save to cache (fire-and-forget) ─────────────────────────────────────
