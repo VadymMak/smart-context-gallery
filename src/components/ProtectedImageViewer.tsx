@@ -91,7 +91,7 @@ export function ProtectedImageViewer({ shareId, watermarkText, fileUrl }: Props)
   return (
     <div
       ref={containerRef}
-      className="relative select-none"
+      className="relative select-none w-full h-full flex items-center justify-center"
       onContextMenu={(e) => e.preventDefault()}
       onDragStart={(e) => e.preventDefault()}
       style={{ WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } as React.CSSProperties}
@@ -104,7 +104,8 @@ export function ProtectedImageViewer({ shareId, watermarkText, fileUrl }: Props)
 
       <canvas
         ref={canvasRef}
-        className={`max-w-full rounded-xl shadow-2xl ${loading ? 'hidden' : 'block'}`}
+        className="rounded-xl shadow-2xl"
+        style={{ maxWidth: '90vw', maxHeight: '85vh', display: loading ? 'none' : 'block', margin: '0 auto' }}
         onContextMenu={(e) => e.preventDefault()}
         onDragStart={(e) => e.preventDefault()}
       />

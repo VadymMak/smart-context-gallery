@@ -44,10 +44,13 @@ export async function GET(
       const cached = await r2.send(new GetObjectCommand({ Bucket: BUCKET, Key: cacheKey }));
       if (cached.Body) {
         const contentType = cacheKey.endsWith('.jpg') ? 'image/jpeg' : 'image/webp';
+        const etag = cached.ETag ?? `"${cacheKey}"`;
         return new Response(cached.Body.transformToWebStream(), {
           headers: {
             'Content-Type': contentType,
-            'Cache-Control': 'public, max-age=86400',
+            'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
+            'ETag': etag,
+            'Vary': 'Accept',
           },
         });
       }
@@ -96,7 +99,9 @@ export async function GET(
     return new Response(toArrayBuffer(body), {
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=86400',
+        'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
+        'ETag': `"${key}-${body.length}"`,
+        'Vary': 'Accept',
       },
     });
   }
@@ -128,7 +133,9 @@ export async function GET(
   return new Response(toArrayBuffer(thumbBuffer), {
     headers: {
       'Content-Type': 'image/webp',
-      'Cache-Control': 'public, max-age=86400',
+      'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
+      'ETag': `"${key}-${thumbBuffer.length}"`,
+      'Vary': 'Accept',
     },
   });
 }

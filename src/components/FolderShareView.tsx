@@ -38,7 +38,7 @@ function fileIcon(file: FileItem): string {
 // Single endpoint for all thumbnails (image + RAW)
 function getThumbUrl(file: FileItem, shareId: string): string | null {
   if (!THUMB_EXTS.has(file.ext)) return null;
-  return `/api/share/${shareId}/thumb?key=${encodeURIComponent(file.key)}&v=20260620`;
+  return `/api/share/${shareId}/thumb?key=${encodeURIComponent(file.key)}&sz=${file.size}`;
 }
 
 // Display name: strip timestamp prefix (e.g. "1781867787686-img.cr2" → "img.cr2")
@@ -387,11 +387,11 @@ export function FolderShareView({ shareId, folderName, mode }: Props) {
               {displayName(lightboxFile.filename)}
             </div>
             {/* Protected viewer: canvas + watermark + blur-on-tab-switch */}
-            <div className="flex items-center justify-center">
+            <div className="w-full h-full flex items-center justify-center">
               <ProtectedImageViewer
                 shareId={shareId}
                 watermarkText="Preview only"
-                fileUrl={`/api/share/${shareId}/thumb?key=${encodeURIComponent(lightboxFile.key)}&v=20260620`}
+                fileUrl={`/api/share/${shareId}/thumb?key=${encodeURIComponent(lightboxFile.key)}&sz=${lightboxFile.size}`}
               />
             </div>
           </div>
