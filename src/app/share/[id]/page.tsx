@@ -1,10 +1,9 @@
 import { getShareById, isShareExpired } from '@/lib/shares';
-import { listFolderFiles } from '@/lib/r2';
 import { ProtectedImageViewer } from '@/components/ProtectedImageViewer';
 import { ProtectedVideoPlayer } from '@/components/ProtectedVideoPlayer';
 import ProtectedPdfViewer from '@/components/ProtectedPdfViewer';
 import ProtectedDocViewer from '@/components/ProtectedDocViewer';
-import { FolderSharePage } from '@/components/FolderSharePage';
+import { FolderShareView } from '@/components/FolderShareView';
 import { notFound } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
@@ -36,9 +35,14 @@ export default async function SharePage({ params }: Props) {
   }
 
   // ── Folder share ──────────────────────────────────────────────────────────
-  if (share.fileType === 'folder' && share.folderPath) {
-    const files = await listFolderFiles(share.folderPath);
-    return <FolderSharePage share={share} files={files} />;
+  if (share.fileType === 'folder') {
+    return (
+      <FolderShareView
+        shareId={id}
+        folderName={share.fileName}
+        mode={share.mode}
+      />
+    );
   }
 
   const isPreview = share.mode === 'preview';
