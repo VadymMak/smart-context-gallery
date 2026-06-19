@@ -6,6 +6,7 @@ import type { ImageMetadata } from '@/lib/metadata';
 import type { Share } from '@/lib/shares';
 import { ShareModal } from '@/components/ShareModal';
 import { FolderShareModal } from '@/components/FolderShareModal';
+import { LazyThumb } from '@/components/LazyThumb';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -654,12 +655,10 @@ function FileCard({ file, meta, selectMode, selected, onToggleSelect, onDeleteRe
         </>
       ) : isRaw && !rawThumbError ? (
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/api/thumb?key=${encodeURIComponent(file.key)}`}
+          <LazyThumb
+            thumbUrl={`/api/thumb?key=${encodeURIComponent(file.key)}`}
             alt={file.filename}
-            className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300"
-            loading="lazy"
+            className="absolute inset-0 transition-transform group-hover:scale-105 duration-300"
             onError={() => setRawThumbError(true)}
           />
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors duration-200" />
@@ -1899,15 +1898,11 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={file.url} alt="" className="w-10 h-10 object-cover rounded-lg flex-shrink-0" />
                           ) : kind === 'raw' ? (
-                            <div className="w-10 h-10 rounded-lg flex-shrink-0 bg-gray-200 overflow-hidden">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={`/api/thumb?key=${encodeURIComponent(file.key)}`}
-                                alt=""
-                                className="w-full h-full object-cover"
-                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                              />
-                            </div>
+                            <LazyThumb
+                              thumbUrl={`/api/thumb?key=${encodeURIComponent(file.key)}`}
+                              alt=""
+                              className="w-10 h-10 rounded-lg flex-shrink-0 bg-gray-200 overflow-hidden"
+                            />
                           ) : (
                             <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
                               <FileTypeIcon ext={ext} />
