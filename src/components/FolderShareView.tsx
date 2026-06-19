@@ -368,27 +368,32 @@ export function FolderShareView({ shareId, folderName, mode }: Props) {
       {/* ── Lightbox ──────────────────────────────────────────────────────────── */}
       {lightboxFile && (
         <div
-          className="fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center p-4"
+          className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center p-4"
           onClick={() => setLightboxFile(null)}
         >
-          {/* Close button */}
-          <button
-            onClick={() => setLightboxFile(null)}
-            className="absolute top-4 right-4 z-10 w-9 h-9 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-xl transition-colors"
+          <div
+            className="relative w-full h-full max-w-6xl max-h-[95vh] flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
           >
-            ✕
-          </button>
-          {/* Filename */}
-          <p className="text-white/60 text-xs mb-3 select-none">
-            {displayName(lightboxFile.filename)}
-          </p>
-          {/* Protected viewer with canvas + watermark + blur-on-tab-switch */}
-          <div onClick={(e) => e.stopPropagation()}>
-            <ProtectedImageViewer
-              shareId={shareId}
-              watermarkText="Preview only"
-              fileUrl={`/api/share/${shareId}/thumb?key=${encodeURIComponent(lightboxFile.key)}&v=20260620`}
-            />
+            {/* Close button */}
+            <button
+              onClick={() => setLightboxFile(null)}
+              className="absolute top-2 right-2 z-10 w-9 h-9 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-xl transition-colors"
+            >
+              ✕
+            </button>
+            {/* Filename */}
+            <div className="absolute top-2 left-4 z-10 text-white/60 text-sm truncate max-w-[80%] select-none">
+              {displayName(lightboxFile.filename)}
+            </div>
+            {/* Protected viewer: canvas + watermark + blur-on-tab-switch */}
+            <div className="w-full h-full flex items-center justify-center">
+              <ProtectedImageViewer
+                shareId={shareId}
+                watermarkText="Preview only"
+                fileUrl={`/api/share/${shareId}/thumb?key=${encodeURIComponent(lightboxFile.key)}&v=20260620`}
+              />
+            </div>
           </div>
         </div>
       )}

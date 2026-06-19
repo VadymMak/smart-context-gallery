@@ -26,10 +26,13 @@ export function ProtectedImageViewer({ shareId, watermarkText, fileUrl }: Props)
     img.src = fileUrl ?? `/api/share/${shareId}/file`;
 
     img.onload = () => {
-      const maxW = Math.min(img.width, window.innerWidth * 0.9);
-      const scale = maxW / img.width;
-      canvas.width = maxW;
-      canvas.height = img.height * scale;
+      const maxW = window.innerWidth * 0.92;
+      const maxH = window.innerHeight * 0.82;
+      const scaleW = Math.min(1, maxW / img.width);
+      const scaleH = Math.min(1, maxH / img.height);
+      const scale = Math.min(scaleW, scaleH);
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
 
       // Draw image
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
