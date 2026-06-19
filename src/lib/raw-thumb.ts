@@ -5,6 +5,22 @@
  * Source: http://lclevy.free.fr/cr2/
  */
 
+/** Returns true only for standard 8-bit JPEGs (precision=8 in SOF marker).
+ *  Canon RAW lossless data encodes as 14-bit — we reject those. */
+function isStandardJpeg(buf: Buffer): boolean {
+  for (let i = 2; i < Math.min(buf.length - 10, 512); i++) {
+    if (buf[i] !== 0xff) continue;
+    const marker = buf[i + 1];
+    // SOF markers: C0-CF excluding C4 (DHT), C8 (JPEG2K ext), CC (arithmetic DAC)
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      const precision = buf[i + 4];
+      console.log('[raw-thumb] JPEG precision:', precision, 'SOF marker: 0xff' + marker.toString(16));
+      return precision === 8;
+    }
+  }
+  return true; // no SOF found — optimistic, let sharp handle it
+}
+
 export function extractRawThumbnail(buffer: Buffer): Buffer | null {
   try {
     if (buffer.length < 8) return null;
@@ -19,43 +35,88 @@ export function extractRawThumbnail(buffer: Buffer): Buffer | null {
       return byteCarve(buffer);
     }
 
-    let ifdOffset = readU32(4);
+    // ── IFD walk with pending queue (handles SubIFDs via tag 0x014A) ─────────
+    const pending: number[] = [readU32(4)];
+    const visited = new Set<number>();
     let bestJpeg: Buffer | null = null;
     let bestSize = 0;
-    const visited = new Set<number>();
 
-    while (ifdOffset > 0 && ifdOffset + 2 < buffer.length && !visited.has(ifdOffset)) {
+    while (pending.length > 0) {
+      const ifdOffset = pending.shift()!;
+      if (!ifdOffset || ifdOffset + 2 >= buffer.length || visited.has(ifdOffset)) continue;
       visited.add(ifdOffset);
+
       const count = readU16(ifdOffset);
-      if (count === 0 || count > 1000) break;
+      if (count === 0 || count > 1000) continue;
 
       let jpegOffset = 0, jpegLength = 0;
+      let stripOffset = 0, stripLength = 0;
+
       for (let i = 0; i < count; i++) {
         const base = ifdOffset + 2 + i * 12;
         if (base + 12 > buffer.length) break;
-        const tag = readU16(base);
-        const val = readU32(base + 8);
-        if (tag === 0x0201) jpegOffset = val;
-        if (tag === 0x0202) jpegLength = val;
-      }
+        const tag  = readU16(base);
+        const type = readU16(base + 2);
+        const nval = readU32(base + 4);
+        const val  = readU32(base + 8);
 
-      if (
-        jpegOffset > 0 && jpegLength > 10_000 &&
-        jpegOffset + jpegLength <= buffer.length && jpegLength > bestSize
-      ) {
-        const slice = buffer.subarray(jpegOffset, jpegOffset + jpegLength);
-        if (slice[0] === 0xff && slice[1] === 0xd8) {
-          bestJpeg = Buffer.from(slice);
-          bestSize = jpegLength;
-          console.log('[raw-thumb] IFD JPEG at offset', jpegOffset, 'size:', jpegLength);
+        if (tag === 0x0201) jpegOffset = val;    // JPEGInterchangeFormat
+        if (tag === 0x0202) jpegLength = val;    // JPEGInterchangeFormatLength
+        if (tag === 0x0111) stripOffset = val;   // StripOffsets
+        if (tag === 0x0117) stripLength = val;   // StripByteCounts
+
+        // SubIFD pointer (tag 0x014A): value is an array of offsets
+        if (tag === 0x014a && type === 4 /* LONG */ && nval <= 8) {
+          if (nval === 1) {
+            pending.push(val);
+          } else {
+            // val is a pointer to the array of offsets
+            for (let j = 0; j < nval; j++) {
+              const arrPos = val + j * 4;
+              if (arrPos + 4 <= buffer.length) pending.push(readU32(arrPos));
+            }
+          }
         }
       }
 
-      const nextOff = ifdOffset + 2 + count * 12;
-      ifdOffset = nextOff + 4 <= buffer.length ? readU32(nextOff) : 0;
+      // Check JPEGInterchangeFormat candidate
+      if (jpegOffset > 0 && jpegLength > 10_000 && jpegOffset + jpegLength <= buffer.length) {
+        const slice = buffer.subarray(jpegOffset, jpegOffset + jpegLength);
+        if (slice[0] === 0xff && slice[1] === 0xd8 && jpegLength > bestSize) {
+          const candidate = Buffer.from(slice);
+          if (isStandardJpeg(candidate)) {
+            bestJpeg = candidate;
+            bestSize = jpegLength;
+            console.log('[raw-thumb] IFD JPEG offset:', jpegOffset, 'size:', jpegLength);
+          } else {
+            console.log('[raw-thumb] Skipped 14-bit IFD JPEG offset:', jpegOffset, 'size:', jpegLength);
+          }
+        }
+      }
+
+      // StripOffsets fallback (some Canon models store preview here)
+      if (stripOffset > 0 && stripLength > 10_000 && stripOffset + stripLength <= buffer.length) {
+        const slice = buffer.subarray(stripOffset, stripOffset + stripLength);
+        if (slice[0] === 0xff && slice[1] === 0xd8 && stripLength > bestSize) {
+          const candidate = Buffer.from(slice);
+          if (isStandardJpeg(candidate)) {
+            bestJpeg = candidate;
+            bestSize = stripLength;
+            console.log('[raw-thumb] Strip JPEG offset:', stripOffset, 'size:', stripLength);
+          }
+        }
+      }
+
+      // Enqueue next chained IFD
+      const nextOffPos = ifdOffset + 2 + count * 12;
+      if (nextOffPos + 4 <= buffer.length) {
+        const nextIfd = readU32(nextOffPos);
+        if (nextIfd > 0) pending.push(nextIfd);
+      }
     }
 
     if (bestJpeg) return bestJpeg;
+
     console.warn('[raw-thumb] IFD found nothing, trying byte carving');
     return byteCarve(buffer);
   } catch (err) {
@@ -64,6 +125,7 @@ export function extractRawThumbnail(buffer: Buffer): Buffer | null {
   }
 }
 
+/** Scan raw bytes for JPEG SOI/EOI pairs, pick largest standard 8-bit JPEG ≤ 5 MB */
 function byteCarve(buffer: Buffer): Buffer | null {
   let best: Buffer | null = null;
   let pos = 0;
@@ -76,8 +138,15 @@ function byteCarve(buffer: Buffer): Buffer | null {
     }
     if (end !== -1) {
       const len = end - start + 2;
-      if (len > 50_000 && (!best || len > best.length))
-        best = Buffer.from(buffer.subarray(start, end + 2));
+      if (len > 50_000 && len <= 5_000_000 && (!best || len > best.length)) {
+        const candidate = Buffer.from(buffer.subarray(start, end + 2));
+        if (isStandardJpeg(candidate)) {
+          best = candidate;
+          console.log('[raw-thumb] byteCarve candidate:', len, 'bytes');
+        } else {
+          console.log('[raw-thumb] byteCarve skipped 14-bit JPEG:', len, 'bytes');
+        }
+      }
     }
     pos = end !== -1 ? end + 2 : start + 2;
   }
