@@ -62,7 +62,7 @@ export function LazyThumb({ thumbUrl, isRaw, className }: LazyThumbProps) {
   }
 
   return (
-    <div ref={containerRef} className={className} style={{ position: 'relative', overflow: 'hidden' }}>
+    <div ref={containerRef} className={className} style={{ position: 'relative', overflow: 'hidden', width: '100%', height: '100%' }}>
 
       {/* Skeleton — shown while idle or loading */}
       {(state === 'idle' || state === 'loading') && (
@@ -111,7 +111,7 @@ export function LazyThumb({ thumbUrl, isRaw, className }: LazyThumbProps) {
         <img
           src={thumbUrl}
           alt=""
-          style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#111', animation: 'thumbFadeIn 0.3s ease' }}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', animation: 'thumbFadeIn 0.3s ease' }}
         />
       )}
 
