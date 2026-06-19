@@ -89,34 +89,34 @@ export async function GET(req: NextRequest) {
     // ── Generate thumbnail ──────────────────────────────────────────────────
     let source: Buffer = fileBuffer;
     if (isRaw) {
-      console.log('[thumb] extracting RAW thumbnail, file size:', fileBuffer.length);
+      console.log('[thumb] Processing CR2/RAW, file size:', fileBuffer.length);
       const embedded = await extractRawThumbnail(fileBuffer);
+
       if (!embedded) {
-        console.warn('[thumb] No embedded JPEG found in CR2:', key, 'size:', fileBuffer.length);
+        console.warn('[thumb] No embedded JPEG found in:', key);
         return new Response(null, { status: 204 });
       }
       if (embedded[0] !== 0xff || embedded[1] !== 0xd8) {
-        console.warn('[thumb] Invalid JPEG header in extracted data');
+        console.warn('[thumb] Bad JPEG header');
         return new Response(null, { status: 204 });
       }
-      console.log('[thumb] Extracted JPEG size:', embedded.length, 'from CR2:', fileBuffer.length);
+      console.log('[thumb] Embedded JPEG found:', embedded.length, 'bytes');
       source = embedded;
     }
 
-    console.log('[thumb] calling sharp, source size:', source.length);
     let thumbBuffer: Buffer;
     try {
       thumbBuffer = await sharp(source)
         .resize(320, 240, { fit: 'inside', withoutEnlargement: true })
         .webp({ quality: 80 })
         .toBuffer();
-      console.log('[thumb] sharp OK, thumb size:', thumbBuffer.length);
+      console.log('[thumb] Sharp webp done:', thumbBuffer.length, 'bytes');
     } catch (sharpErr) {
-      console.warn('[thumb] sharp failed, trying without resize:', sharpErr);
+      console.warn('[thumb] sharp failed:', sharpErr);
       try {
         thumbBuffer = await sharp(source).webp({ quality: 70 }).toBuffer();
-      } catch (e) {
-        console.error('[thumb] sharp total fail:', e);
+      } catch {
+        console.error('[thumb] sharp total fail, returning 204');
         return new Response(null, { status: 204 });
       }
     }
