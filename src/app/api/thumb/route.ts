@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
         return new Response(cached.Body.transformToWebStream(), {
           headers: {
             'Content-Type': 'image/webp',
-            'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+            'Cache-Control': 'public, max-age=86400',
           },
         });
       }
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
     return new Response(toArrayBuffer(thumbnail), {
       headers: {
         'Content-Type': 'image/webp',
-        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+        'Cache-Control': 'public, max-age=86400',
       },
     });
 

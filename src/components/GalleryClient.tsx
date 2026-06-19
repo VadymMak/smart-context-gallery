@@ -598,7 +598,7 @@ function DeleteConfirmModal({ image, deleting, onConfirm, onCancel }: {
         <div className="flex items-center gap-3 mb-6 p-3 bg-gray-50 rounded-xl">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={getFileKind(image.filename).kind === 'raw' ? `/api/thumb?key=${encodeURIComponent(image.key)}` : image.url}
+            src={getFileKind(image.filename).kind === 'raw' ? `/api/thumb?key=${encodeURIComponent(image.key)}&v=20260619` : image.url}
             alt=""
             className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
           />
@@ -655,7 +655,7 @@ function FileCard({ file, meta, selectMode, selected, onToggleSelect, onDeleteRe
       ) : isRaw ? (
         <>
           <LazyThumb
-            thumbUrl={`/api/thumb?key=${encodeURIComponent(file.key)}`}
+            thumbUrl={`/api/thumb?key=${encodeURIComponent(file.key)}&v=20260619`}
             isRaw
             className="absolute inset-0 transition-transform group-hover:scale-105 duration-300"
           />
@@ -1897,7 +1897,7 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
                             <img src={file.url} alt="" className="w-10 h-10 object-cover rounded-lg flex-shrink-0" />
                           ) : kind === 'raw' ? (
                             <LazyThumb
-                              thumbUrl={`/api/thumb?key=${encodeURIComponent(file.key)}`}
+                              thumbUrl={`/api/thumb?key=${encodeURIComponent(file.key)}&v=20260619`}
                               isRaw
                               className="w-10 h-10 rounded-lg flex-shrink-0 overflow-hidden"
                             />
