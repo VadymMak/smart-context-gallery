@@ -627,7 +627,6 @@ function FileCard({ file, meta, selectMode, selected, onToggleSelect, onDeleteRe
   const isRaw = kind === 'raw';
   const ext = file.filename.toLowerCase().split('.').pop() || '';
   const categoryClass = meta?.category ? (CATEGORY_COLORS[meta.category] || CATEGORY_COLORS.other) : '';
-  const [rawThumbError, setRawThumbError] = useState(false);
 
   return (
     <div
@@ -653,13 +652,12 @@ function FileCard({ file, meta, selectMode, selected, onToggleSelect, onDeleteRe
             </div>
           )}
         </>
-      ) : isRaw && !rawThumbError ? (
+      ) : isRaw ? (
         <>
           <LazyThumb
             thumbUrl={`/api/thumb?key=${encodeURIComponent(file.key)}`}
-            alt={file.filename}
+            isRaw
             className="absolute inset-0 transition-transform group-hover:scale-105 duration-300"
-            onError={() => setRawThumbError(true)}
           />
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors duration-200" />
           <span className="absolute top-2 right-2 bg-black/50 text-white text-[10px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">RAW</span>
@@ -1900,8 +1898,8 @@ export function GalleryClient({ initialImages, initialFolders, initialMetadata, 
                           ) : kind === 'raw' ? (
                             <LazyThumb
                               thumbUrl={`/api/thumb?key=${encodeURIComponent(file.key)}`}
-                              alt=""
-                              className="w-10 h-10 rounded-lg flex-shrink-0 bg-gray-200 overflow-hidden"
+                              isRaw
+                              className="w-10 h-10 rounded-lg flex-shrink-0 overflow-hidden"
                             />
                           ) : (
                             <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
