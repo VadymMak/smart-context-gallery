@@ -161,7 +161,7 @@ export async function toWebpThumb(jpegBuffer: Buffer): Promise<Buffer | null> {
     const sharp = (sharpMod as any).default ?? sharpMod;
     return await sharp(jpegBuffer)
       .rotate()
-      .resize(400, 300, { fit: 'inside', withoutEnlargement: true })
+      .resize(400, 300, { fit: 'cover', position: 'centre' })
       .webp({ quality: 75 })
       .toBuffer();
   } catch (err) {
