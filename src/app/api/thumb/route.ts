@@ -91,11 +91,15 @@ export async function GET(req: NextRequest) {
     if (isRaw) {
       console.log('[thumb] extracting RAW thumbnail, file size:', fileBuffer.length);
       const embedded = await extractRawThumbnail(fileBuffer);
-      console.log('[thumb] extracted:', embedded ? `${embedded.length} bytes` : 'null');
       if (!embedded) {
-        console.warn('[thumb] no embedded JPEG — returning 204');
+        console.warn('[thumb] No embedded JPEG found in CR2:', key, 'size:', fileBuffer.length);
         return new Response(null, { status: 204 });
       }
+      if (embedded[0] !== 0xff || embedded[1] !== 0xd8) {
+        console.warn('[thumb] Invalid JPEG header in extracted data');
+        return new Response(null, { status: 204 });
+      }
+      console.log('[thumb] Extracted JPEG size:', embedded.length, 'from CR2:', fileBuffer.length);
       source = embedded;
     }
 
@@ -103,13 +107,18 @@ export async function GET(req: NextRequest) {
     let thumbBuffer: Buffer;
     try {
       thumbBuffer = await sharp(source)
-        .resize(400, 300, { fit: 'cover', position: 'centre' })
-        .webp({ quality: 75 })
+        .resize(320, 240, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 80 })
         .toBuffer();
       console.log('[thumb] sharp OK, thumb size:', thumbBuffer.length);
     } catch (sharpErr) {
-      console.error('[thumb] sharp CRASH:', sharpErr);
-      return new Response(null, { status: 204 });
+      console.warn('[thumb] sharp failed, trying without resize:', sharpErr);
+      try {
+        thumbBuffer = await sharp(source).webp({ quality: 70 }).toBuffer();
+      } catch (e) {
+        console.error('[thumb] sharp total fail:', e);
+        return new Response(null, { status: 204 });
+      }
     }
 
     // ── Save to cache (fire-and-forget) ─────────────────────────────────────

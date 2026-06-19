@@ -69,18 +69,28 @@ export async function GET(
       console.warn('[share/thumb] No embedded JPEG in', key, '— file size:', fileBuffer.length);
       return new Response(null, { status: 204 });
     }
+    if (embedded[0] !== 0xff || embedded[1] !== 0xd8) {
+      console.warn('[share/thumb] Invalid JPEG header in', key);
+      return new Response(null, { status: 204 });
+    }
+    console.log('[share/thumb] Extracted JPEG size:', embedded.length, 'from CR2:', fileBuffer.length);
     inputBuffer = embedded;
   }
 
   let thumbBuffer: Buffer;
   try {
     thumbBuffer = await sharp(inputBuffer)
-      .resize(320, 240, { fit: 'cover', position: 'entropy' })
-      .webp({ quality: 75 })
+      .resize(320, 240, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 80 })
       .toBuffer();
   } catch (err) {
-    console.error('[share/thumb] sharp error for', key, ':', err);
-    return new Response(null, { status: 204 });
+    console.warn('[share/thumb] sharp failed, trying without resize:', err);
+    try {
+      thumbBuffer = await sharp(inputBuffer).webp({ quality: 70 }).toBuffer();
+    } catch (e) {
+      console.error('[share/thumb] sharp total fail for', key, ':', e);
+      return new Response(null, { status: 204 });
+    }
   }
 
   // ── Write to cache (fire-and-forget) ────────────────────────────────────
