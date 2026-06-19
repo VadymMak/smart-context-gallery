@@ -111,7 +111,7 @@ export function LazyThumb({ thumbUrl, isRaw, className }: LazyThumbProps) {
         <img
           src={thumbUrl}
           alt=""
-          style={{ width: '100%', height: '100%', objectFit: 'cover', animation: 'thumbFadeIn 0.3s ease' }}
+          style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#111', animation: 'thumbFadeIn 0.3s ease' }}
         />
       )}
 
