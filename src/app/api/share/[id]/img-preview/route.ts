@@ -16,15 +16,23 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const key = req.nextUrl.searchParams.get('key');
-  if (!key) return new Response('Missing key', { status: 400 });
+  const keyParam = req.nextUrl.searchParams.get('key');
 
   const share = await getShareById(id);
-  if (!share || isShareExpired(share) || share.fileType !== 'folder' || !share.folderPath) {
+  if (!share || isShareExpired(share)) {
     return new Response('Not found', { status: 404 });
   }
-  if (!key.startsWith(share.folderPath)) {
-    return new Response('Forbidden', { status: 403 });
+
+  // Folder share: key param required, must be within the shared folder
+  // Single-file share: use share.fileKey directly, no key param needed
+  let key: string;
+  if (share.fileType === 'folder') {
+    if (!keyParam || !share.folderPath) return new Response('Missing key', { status: 400 });
+    if (!keyParam.startsWith(share.folderPath)) return new Response('Forbidden', { status: 403 });
+    key = keyParam;
+  } else {
+    if (!share.fileKey) return new Response('Not found', { status: 404 });
+    key = share.fileKey;
   }
 
   const ext   = key.split('.').pop()?.toLowerCase() ?? '';
