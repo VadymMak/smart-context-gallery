@@ -173,7 +173,7 @@ export default async function SharePage({ params }: Props) {
             </>
           )}
 
-          {/* Download mode — RAW image: WebP preview + download original */}
+          {/* Download mode — RAW image: converted WebP preview + download original */}
           {!isPreview && isRaw && (
             <div className="flex flex-col items-center gap-6">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -182,7 +182,9 @@ export default async function SharePage({ params }: Props) {
                 alt={share.fileName}
                 className="max-w-full max-h-[70vh] rounded-xl shadow-2xl object-contain"
               />
-              <p className="text-white/40 text-sm">RAW preview — open original in Lightroom or Camera Raw</p>
+              <p className="text-white/40 text-sm">
+                Showing converted preview. Download original for Lightroom / Camera Raw.
+              </p>
               <a
                 href={`/api/share/${id}/file?download=1`}
                 download={share.fileName}
@@ -191,7 +193,7 @@ export default async function SharePage({ params }: Props) {
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
                 </svg>
-                ⬇ Download original {share.fileName.split('.').pop()?.toUpperCase()}
+                ⬇ Download original {share.fileName.split('.').pop()?.toUpperCase()} (12+ MB RAW)
               </a>
             </div>
           )}
