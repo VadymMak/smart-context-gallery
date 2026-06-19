@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getShareById, isShareExpired } from '@/lib/shares';
 import { r2, BUCKET } from '@/lib/r2';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
+import sharp from 'sharp';
+
+const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'heic', 'bmp']);
 
 const MIME: Record<string, string> = {
   jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
@@ -51,6 +54,34 @@ export async function GET(
   }
 
   const filename = key.split('/').pop() || key;
+  const ext      = filename.toLowerCase().split('.').pop() ?? '';
+  const isThumb  = request.nextUrl.searchParams.get('thumb') === '1';
+
+  // ── Thumbnail mode: resize image to 400×300 WebP via sharp ───────────────
+  if (isThumb && IMAGE_EXTS.has(ext)) {
+    // Stream is consumed here — must return directly, cannot fall through
+    const bytes = await body.transformToByteArray();
+    const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    try {
+      const thumbBuf = await sharp(Buffer.from(ab))
+        .resize(400, 300, { fit: 'cover', position: 'centre' })
+        .webp({ quality: 72 })
+        .toBuffer();
+      const thumbAb = thumbBuf.buffer.slice(
+        thumbBuf.byteOffset,
+        thumbBuf.byteOffset + thumbBuf.byteLength,
+      ) as ArrayBuffer;
+      return new Response(thumbAb, {
+        headers: {
+          'Content-Type': 'image/webp',
+          'Cache-Control': 'public, max-age=86400',
+        },
+      });
+    } catch {
+      return new Response(null, { status: 204 }); // onError → icon fallback
+    }
+  }
+
   const contentType = mimeForFilename(filename) || response.ContentType || 'application/octet-stream';
 
   const headers: Record<string, string> = {
@@ -68,7 +99,6 @@ export async function GET(
       ? `attachment; filename="${filename}"`
       : 'inline';
   } else {
-    // preview mode — serve inline, no download
     headers['Content-Disposition'] = 'inline';
     headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0';
   }

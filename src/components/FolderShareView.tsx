@@ -30,7 +30,12 @@ function fileIcon(file: FileItem): string {
 }
 
 function thumbUrl(file: FileItem, shareId: string): string | null {
-  if (file.isImage || file.isRaw) {
+  if (file.isImage) {
+    // folder-file already validates security via shareId in the URL path
+    return `/api/share/${shareId}/folder-file?key=${encodeURIComponent(file.key)}&thumb=1`;
+  }
+  if (file.isRaw) {
+    // RAW: use dedicated thumb endpoint (extracts embedded JPEG from CR2 etc.)
     return `/api/thumb?shareId=${shareId}&key=${encodeURIComponent(file.key)}`;
   }
   return null;
