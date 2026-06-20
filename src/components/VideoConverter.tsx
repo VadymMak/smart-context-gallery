@@ -60,6 +60,8 @@ interface QueueItem {
   duration?: number;
   saveStatus?: 'saving' | 'saved' | 'error';
   saveError?: string;
+  elapsed?: number;
+  eta?: number | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -82,6 +84,13 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function formatTime(sec: number): string {
+  if (sec < 60) return `${Math.round(sec)}s`;
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}m ${s}s`;
 }
 
 function estimateSize(durationSeconds: number | undefined, presetId: QualityPresetId, isReels: boolean): string | null {
@@ -141,8 +150,9 @@ export default function VideoConverter() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ffmpegRef = useRef<FFmpeg | null>(null);
+  const startTimeRef = useRef<number>(0);
   // Single progress callback ref — avoids stacking listeners on ffmpeg
-  const progressCb = useRef<((p: number) => void) | null>(null);
+  const progressCb = useRef<((p: number, elapsed: number, eta: number | null) => void) | null>(null);
 
   // Create FFmpeg instance and load WASM (browser only — ssr: false guarantees this)
   useEffect(() => {
@@ -150,7 +160,10 @@ export default function VideoConverter() {
     ffmpegRef.current = instance;
 
     instance.on('progress', ({ progress }) => {
-      progressCb.current?.(Math.min(99, Math.round(progress * 100)));
+      const pct = Math.min(99, Math.round(progress * 100));
+      const elapsed = (Date.now() - startTimeRef.current) / 1000;
+      const eta = progress > 0.02 ? Math.max(0, elapsed / progress - elapsed) : null;
+      progressCb.current?.(pct, elapsed, eta);
     });
 
     const base = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
@@ -215,14 +228,15 @@ export default function VideoConverter() {
     const inputName = `input_${item.id}`;
     const outputName = item.file.name.replace(/\.[^.]+$/, '') + '_converted.mp4';
 
-    setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'converting', progress: 0 } : q));
+    setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'converting', progress: 0, elapsed: 0, eta: null } : q));
 
-    progressCb.current = (p) =>
-      setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, progress: p } : q));
+    progressCb.current = (p, elapsed, eta) =>
+      setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, progress: p, elapsed, eta } : q));
 
     const ff = ffmpegRef.current!;
     try {
       await ff.writeFile(inputName, await fetchFile(item.file));
+      startTimeRef.current = Date.now();
       await ff.exec(buildFFmpegArgs(item, inputName, outputName));
 
       const data = await ff.readFile(outputName);
@@ -550,16 +564,23 @@ function QueueCard({ item, onRemove, onUpdate, folders, selectedFolder, onFolder
 
       {/* Progress */}
       {item.status === 'converting' && (
-        <div className="space-y-1.5">
-          <div className="flex justify-between text-xs text-gray-400">
-            <span>Converting…</span>
-            <span>{item.progress}%</span>
-          </div>
-          <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+        <div className="space-y-2">
+          <div className="w-full bg-gray-700 rounded-full h-2.5 overflow-hidden">
             <div
-              className="h-full bg-blue-600 rounded-full transition-all duration-200"
+              className="bg-blue-500 h-2.5 rounded-full transition-all duration-300"
               style={{ width: `${item.progress}%` }}
             />
+          </div>
+          <div className="flex justify-between text-xs text-gray-400">
+            <span>⚙️ Converting… {item.progress}%</span>
+            <span className="flex gap-3">
+              {item.elapsed !== undefined && item.elapsed > 0 && (
+                <span>⏱ {formatTime(item.elapsed)}</span>
+              )}
+              {item.eta != null && (
+                <span>ETA: ~{formatTime(item.eta)}</span>
+              )}
+            </span>
           </div>
         </div>
       )}
