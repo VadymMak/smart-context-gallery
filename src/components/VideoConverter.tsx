@@ -169,15 +169,18 @@ export default function VideoConverter() {
 
     // Files served from /public/ffmpeg — same-origin, no CORP headers needed
     (async () => {
+      console.log('[FFmpeg] Starting load...');
       try {
         await instance.load({
           coreURL: '/ffmpeg/ffmpeg-core.js',
           wasmURL: '/ffmpeg/ffmpeg-core.wasm',
+          // workerURL omitted: @ffmpeg/core@0.12.6 UMD build has no worker file
         });
+        console.log('[FFmpeg] Loaded successfully');
         setFfmpegStatus('ready');
       } catch (err) {
-        console.error('FFmpeg load failed:', err);
-        setLoadError('Failed to load FFmpeg. Please refresh the page.');
+        console.error('[FFmpeg] Load failed:', err);
+        setLoadError(String(err));
         setFfmpegStatus('error');
       }
     })();
