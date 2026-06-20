@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Video Converter — AK Storage</title>
 <script src="/ffmpeg/ffmpeg.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/umd/util.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #030712; color: #f3f4f6; min-height: 100vh; }
@@ -169,9 +168,13 @@ select { font-family: inherit; }
 <script>
 // ─── FFmpeg globals from UMD ───────────────────────────────────────────────
 const { FFmpeg } = window.FFmpegWASM || {};
-const { fetchFile } = window.FFmpegUtil || {};
+async function fetchFile(file) {
+  if (file instanceof File || file instanceof Blob) return new Uint8Array(await file.arrayBuffer());
+  if (typeof file === 'string') return new Uint8Array(await (await fetch(file)).arrayBuffer());
+  throw new Error('fetchFile: unsupported input');
+}
 
-if (!FFmpeg || !fetchFile) {
+if (!FFmpeg) {
   document.getElementById('error-text').textContent = 'Failed to load FFmpeg library from CDN. Check your connection.';
   document.getElementById('error-banner').style.display = '';
   document.getElementById('ffmpeg-badge').innerHTML = '<span style="color:#f87171">FFmpeg failed to load</span>';

@@ -8,9 +8,10 @@
       ]
     },
     {
-      "source": "/ffmpeg/(.*)",
+      "source": "/ffmpeg/:path*",
       "headers": [
-        { "key": "Cross-Origin-Resource-Policy", "value": "cross-origin" }
+        { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" },
+        { "key": "Cross-Origin-Resource-Policy", "value": "same-origin" }
       ]
     }
   ]
