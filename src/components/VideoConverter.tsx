@@ -6,16 +6,51 @@ import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Quality = 'high' | 'medium' | 'small';
-type Resolution = 'original' | '1080p' | '720p';
-type Preset = 'none' | 'reels' | 'square';
+const QUALITY_PRESETS = [
+  {
+    id: '720p' as const,
+    label: '720p',
+    desc: 'HD — fast',
+    bitrateMbps: 1.5,
+    args: ['-vf', 'scale=-2:720', '-crf', '23', '-preset', 'fast'],
+  },
+  {
+    id: '1080p' as const,
+    label: '1080p',
+    desc: 'Full HD — balanced',
+    bitrateMbps: 4,
+    args: ['-vf', 'scale=-2:1080', '-crf', '20', '-preset', 'fast'],
+  },
+  {
+    id: '4k' as const,
+    label: '4K',
+    desc: 'Ultra HD — max',
+    bitrateMbps: 15,
+    args: ['-vf', 'scale=-2:2160', '-crf', '18', '-preset', 'medium'],
+  },
+  {
+    id: 'original' as const,
+    label: 'Original',
+    desc: 'Keep resolution',
+    bitrateMbps: 6,
+    args: ['-crf', '20', '-preset', 'fast'],
+  },
+] as const;
+
+type QualityPresetId = (typeof QUALITY_PRESETS)[number]['id'];
+
+const REELS_ARGS = [
+  '-vf',
+  'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2',
+  '-crf', '22',
+  '-preset', 'fast',
+];
 
 interface QueueItem {
   id: string;
   file: File;
-  quality: Quality;
-  resolution: Resolution;
-  preset: Preset;
+  qualityPreset: QualityPresetId;
+  isReels: boolean;
   status: 'pending' | 'converting' | 'done' | 'error';
   progress: number;
   outputUrl?: string;
@@ -23,6 +58,8 @@ interface QueueItem {
   outputName?: string;
   error?: string;
   duration?: number;
+  saveStatus?: 'saving' | 'saved' | 'error';
+  saveError?: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -33,35 +70,12 @@ const ACCEPTED_MIME = [
   'video/x-matroska', 'video/webm', 'video/x-m4v',
 ];
 
-const CRF_MAP: Record<Quality, string> = {
-  high: '18',
-  medium: '23',
-  small: '28',
-};
-
-const QUALITY_LABELS: Record<Quality, string> = {
-  high: 'High (CRF 18)',
-  medium: 'Medium (CRF 23)',
-  small: 'Small (CRF 28)',
-};
-
-const RESOLUTION_LABELS: Record<Resolution, string> = {
-  original: 'Original',
-  '1080p': '1080p',
-  '720p': '720p',
-};
-
-const PRESET_LABELS: Record<Preset, string> = {
-  none: 'None',
-  reels: 'Instagram Reels (1080×1920)',
-  square: 'Instagram Square (1080×1080)',
-};
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(0)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
 }
 
 function formatDuration(seconds: number): string {
@@ -70,17 +84,44 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function buildVfFilter(resolution: Resolution, preset: Preset): string[] {
-  if (preset === 'reels') return ['-vf', 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2'];
-  if (preset === 'square') return ['-vf', 'scale=1080:1080:force_original_aspect_ratio=decrease,pad=1080:1080:(ow-iw)/2:(oh-ih)/2'];
-  if (resolution === '1080p') return ['-vf', 'scale=-2:1080'];
-  if (resolution === '720p') return ['-vf', 'scale=-2:720'];
-  return [];
+function estimateSize(durationSeconds: number | undefined, presetId: QualityPresetId, isReels: boolean): string | null {
+  if (!durationSeconds) return null;
+  const bitrateMbps = isReels
+    ? 3.5
+    : QUALITY_PRESETS.find(p => p.id === presetId)!.bitrateMbps;
+  const bytes = (bitrateMbps * 1_000_000 / 8) * durationSeconds;
+  return `~${formatBytes(bytes)}`;
+}
+
+function buildFFmpegArgs(item: QueueItem, inputName: string, outputName: string): string[] {
+  const extraArgs = item.isReels
+    ? REELS_ARGS
+    : [...QUALITY_PRESETS.find(p => p.id === item.qualityPreset)!.args];
+
+  return [
+    '-i', inputName,
+    '-vcodec', 'libx264',
+    '-acodec', 'aac',
+    ...extraArgs,
+    '-movflags', '+faststart',
+    outputName,
+  ];
 }
 
 function isVideoFile(file: File): boolean {
-  const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+  const ext = '.' + (file.name.split('.').pop()?.toLowerCase() ?? '');
   return ACCEPTED_EXTS.includes(ext) || ACCEPTED_MIME.includes(file.type);
+}
+
+function getFileDuration(file: File): Promise<number> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => { URL.revokeObjectURL(url); resolve(video.duration); };
+    video.onerror = () => { URL.revokeObjectURL(url); resolve(0); };
+    video.src = url;
+  });
 }
 
 // ─── FFmpeg singleton ─────────────────────────────────────────────────────────
@@ -89,19 +130,15 @@ const ffmpeg = new FFmpeg();
 let ffmpegLoaded = false;
 let ffmpegLoading = false;
 
-async function loadFFmpeg(onLog?: (msg: string) => void) {
+async function loadFFmpeg() {
   if (ffmpegLoaded) return;
   if (ffmpegLoading) {
-    // wait for other call
     await new Promise<void>((resolve) => {
-      const check = setInterval(() => {
-        if (ffmpegLoaded) { clearInterval(check); resolve(); }
-      }, 100);
+      const t = setInterval(() => { if (ffmpegLoaded) { clearInterval(t); resolve(); } }, 100);
     });
     return;
   }
   ffmpegLoading = true;
-  if (onLog) ffmpeg.on('log', ({ message }) => onLog(message));
   const base = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
   await ffmpeg.load({
     coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
@@ -111,103 +148,97 @@ async function loadFFmpeg(onLog?: (msg: string) => void) {
   ffmpegLoading = false;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function VideoConverter() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [ffmpegStatus, setFfmpegStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [ffmpegStatus, setFfmpegStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [isConverting, setIsConverting] = useState(false);
 
-  // Default settings (per-file overrideable)
-  const [defaultQuality, setDefaultQuality] = useState<Quality>('medium');
-  const [defaultResolution, setDefaultResolution] = useState<Resolution>('original');
-  const [defaultPreset, setDefaultPreset] = useState<Preset>('none');
+  const [defaultPreset, setDefaultPreset] = useState<QualityPresetId>('1080p');
+  const [defaultReels, setDefaultReels] = useState(false);
+
+  const [folders, setFolders] = useState<string[]>([]);
+  const [selectedFolder, setSelectedFolder] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  // Single global progress callback — avoids stacking listeners on ffmpeg
+  const progressCb = useRef<((p: number) => void) | null>(null);
 
-  // Preload FFmpeg on mount
+  // Load FFmpeg + set up single progress listener
   useEffect(() => {
-    setFfmpegStatus('loading');
+    ffmpeg.on('progress', ({ progress }) => {
+      progressCb.current?.(Math.min(99, Math.round(progress * 100)));
+    });
     loadFFmpeg()
       .then(() => setFfmpegStatus('ready'))
       .catch(() => setFfmpegStatus('error'));
   }, []);
 
-  const addFiles = useCallback((files: File[]) => {
+  // Load folders (also detects auth)
+  useEffect(() => {
+    fetch('/api/folders')
+      .then(async (r) => {
+        if (!r.ok) return;
+        const data = await r.json();
+        setFolders(data.folders ?? []);
+        setIsAuthenticated(true);
+      })
+      .catch(() => {});
+  }, []);
+
+  const addFiles = useCallback(async (files: File[]) => {
     const valid = files.filter(isVideoFile);
     if (!valid.length) return;
-    setQueue((prev) => [
-      ...prev,
-      ...valid.map((f) => ({
-        id: `${Date.now()}-${Math.random()}`,
-        file: f,
-        quality: defaultQuality,
-        resolution: defaultResolution,
-        preset: defaultPreset,
-        status: 'pending' as const,
-        progress: 0,
-      })),
-    ]);
-  }, [defaultQuality, defaultResolution, defaultPreset]);
+
+    const newItems: QueueItem[] = valid.map((f) => ({
+      id: `${Date.now()}-${Math.random()}`,
+      file: f,
+      qualityPreset: defaultPreset,
+      isReels: defaultReels,
+      status: 'pending',
+      progress: 0,
+    }));
+
+    setQueue((prev) => [...prev, ...newItems]);
+
+    // Resolve durations in parallel after adding
+    const durations = await Promise.all(newItems.map((i) => getFileDuration(i.file)));
+    setQueue((prev) =>
+      prev.map((q) => {
+        const idx = newItems.findIndex((i) => i.id === q.id);
+        return idx >= 0 ? { ...q, duration: durations[idx] } : q;
+      })
+    );
+  }, [defaultPreset, defaultReels]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
-    addFiles(files);
+    addFiles(Array.from(e.dataTransfer.files));
   }, [addFiles]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    addFiles(files);
+    addFiles(Array.from(e.target.files ?? []));
     e.target.value = '';
   }, [addFiles]);
 
-  const getFileDuration = useCallback((file: File): Promise<number> => {
-    return new Promise((resolve) => {
-      const url = URL.createObjectURL(file);
-      const video = document.createElement('video');
-      video.preload = 'metadata';
-      video.onloadedmetadata = () => {
-        URL.revokeObjectURL(url);
-        resolve(video.duration);
-      };
-      video.onerror = () => { URL.revokeObjectURL(url); resolve(0); };
-      video.src = url;
-    });
-  }, []);
-
   const convertItem = useCallback(async (item: QueueItem) => {
-    const inputName = `input_${item.id}.mov`;
+    const inputName = `input_${item.id}`;
     const outputName = item.file.name.replace(/\.[^.]+$/, '') + '_converted.mp4';
 
     setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'converting', progress: 0 } : q));
 
-    ffmpeg.on('progress', ({ progress }) => {
-      setQueue((prev) => prev.map((q) =>
-        q.id === item.id ? { ...q, progress: Math.min(99, Math.round(progress * 100)) } : q
-      ));
-    });
+    progressCb.current = (p) =>
+      setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, progress: p } : q));
 
     try {
       await ffmpeg.writeFile(inputName, await fetchFile(item.file));
-
-      const vfArgs = buildVfFilter(item.resolution, item.preset);
-      await ffmpeg.exec([
-        '-i', inputName,
-        '-vcodec', 'libx264',
-        '-acodec', 'aac',
-        '-crf', CRF_MAP[item.quality],
-        '-preset', 'fast',
-        ...vfArgs,
-        '-movflags', '+faststart',
-        outputName,
-      ]);
+      await ffmpeg.exec(buildFFmpegArgs(item, inputName, outputName));
 
       const data = await ffmpeg.readFile(outputName);
-      // FFmpeg returns Uint8Array<ArrayBufferLike>; Blob constructor needs ArrayBuffer
       const blob = new Blob([data as unknown as BlobPart], { type: 'video/mp4' });
       const url = URL.createObjectURL(blob);
 
@@ -220,10 +251,13 @@ export default function VideoConverter() {
           : q
       ));
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Conversion failed';
       setQueue((prev) => prev.map((q) =>
-        q.id === item.id ? { ...q, status: 'error', error: msg } : q
+        q.id === item.id
+          ? { ...q, status: 'error', error: err instanceof Error ? err.message : 'Conversion failed' }
+          : q
       ));
+    } finally {
+      progressCb.current = null;
     }
   }, []);
 
@@ -234,13 +268,10 @@ export default function VideoConverter() {
 
     setIsConverting(true);
     for (const item of pending) {
-      // Resolve duration before converting
-      const duration = await getFileDuration(item.file);
-      setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, duration } : q));
       await convertItem(item);
     }
     setIsConverting(false);
-  }, [queue, ffmpegStatus, isConverting, convertItem, getFileDuration]);
+  }, [queue, ffmpegStatus, isConverting, convertItem]);
 
   const removeItem = useCallback((id: string) => {
     setQueue((prev) => {
@@ -250,86 +281,119 @@ export default function VideoConverter() {
     });
   }, []);
 
-  const updateItemSetting = useCallback(<K extends keyof QueueItem>(id: string, key: K, value: QueueItem[K]) => {
+  const updateItem = useCallback(<K extends keyof QueueItem>(id: string, key: K, value: QueueItem[K]) => {
     setQueue((prev) => prev.map((q) => q.id === id ? { ...q, [key]: value } : q));
   }, []);
+
+  const handleSaveToGallery = useCallback(async (item: QueueItem) => {
+    if (!item.outputUrl || !item.outputName) return;
+
+    setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, saveStatus: 'saving' } : q));
+
+    try {
+      const folder = selectedFolder || 'uncategorized';
+
+      // 1. Get presigned URL
+      const presignRes = await fetch('/api/upload/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: item.outputName, contentType: 'video/mp4', folder }),
+      });
+      if (!presignRes.ok) throw new Error('Failed to get upload URL');
+      const { signedUrl, key } = await presignRes.json() as { signedUrl: string; key: string };
+
+      // 2. Fetch blob from memory URL and upload directly to R2
+      const blobRes = await fetch(item.outputUrl);
+      const blob = await blobRes.blob();
+
+      const uploadRes = await fetch(signedUrl, {
+        method: 'PUT',
+        body: blob,
+        headers: { 'Content-Type': 'video/mp4' },
+      });
+      if (!uploadRes.ok) throw new Error('Upload to storage failed');
+
+      // 3. Save metadata
+      const metaRes = await fetch('/api/upload/metadata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key,
+          filename: item.outputName,
+          contentType: 'video/mp4',
+          size: item.outputSize ?? 0,
+          folder,
+        }),
+      });
+      if (!metaRes.ok) throw new Error('Failed to save metadata');
+
+      setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, saveStatus: 'saved' } : q));
+    } catch (err) {
+      setQueue((prev) => prev.map((q) =>
+        q.id === item.id
+          ? { ...q, saveStatus: 'error', saveError: err instanceof Error ? err.message : 'Save failed' }
+          : q
+      ));
+    }
+  }, [selectedFolder]);
 
   const pendingCount = queue.filter((q) => q.status === 'pending').length;
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       {/* Header */}
-      <div className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between">
+      <div className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
           <a href="/" className="text-gray-400 hover:text-gray-200 transition-colors text-sm flex items-center gap-1">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
             Back
           </a>
-          <span className="text-gray-600">|</span>
+          <span className="text-gray-700">|</span>
           <h1 className="text-sm font-medium text-gray-200">Video Converter</h1>
         </div>
-        <div className="flex items-center gap-2 text-xs">
-          {ffmpegStatus === 'loading' && (
-            <span className="text-yellow-400 flex items-center gap-1">
-              <span className="inline-block w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-              Loading FFmpeg…
-            </span>
-          )}
-          {ffmpegStatus === 'ready' && (
-            <span className="text-green-400 flex items-center gap-1">
-              <span className="inline-block w-2 h-2 rounded-full bg-green-400" />
-              FFmpeg ready
-            </span>
-          )}
-          {ffmpegStatus === 'error' && (
-            <span className="text-red-400">FFmpeg failed to load</span>
-          )}
-        </div>
+        <FFmpegStatusBadge status={ffmpegStatus} />
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
 
-        {/* Default settings */}
-        <div className="bg-gray-900 rounded-xl border border-gray-800 p-5">
-          <h2 className="text-sm font-semibold text-gray-300 mb-4">Default Settings for New Files</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <label className="space-y-1">
-              <span className="text-xs text-gray-400">Quality</span>
-              <select
-                value={defaultQuality}
-                onChange={(e) => setDefaultQuality(e.target.value as Quality)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+        {/* Output Settings */}
+        <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-4">
+          <h2 className="text-sm font-semibold text-gray-300">Output Settings</h2>
+
+          {/* Quality preset tabs */}
+          <div className="grid grid-cols-4 gap-2">
+            {QUALITY_PRESETS.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setDefaultPreset(p.id)}
+                className={`
+                  rounded-lg px-3 py-2.5 text-left transition-colors border
+                  ${defaultPreset === p.id && !defaultReels
+                    ? 'border-blue-500 bg-blue-500/10 text-blue-300'
+                    : 'border-gray-700 hover:border-gray-600 text-gray-400 hover:text-gray-300'
+                  }
+                `}
               >
-                {(Object.keys(QUALITY_LABELS) as Quality[]).map((k) => (
-                  <option key={k} value={k}>{QUALITY_LABELS[k]}</option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-gray-400">Resolution</span>
-              <select
-                value={defaultResolution}
-                onChange={(e) => setDefaultResolution(e.target.value as Resolution)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-              >
-                {(Object.keys(RESOLUTION_LABELS) as Resolution[]).map((k) => (
-                  <option key={k} value={k}>{RESOLUTION_LABELS[k]}</option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-gray-400">Instagram Preset</span>
-              <select
-                value={defaultPreset}
-                onChange={(e) => setDefaultPreset(e.target.value as Preset)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-              >
-                {(Object.keys(PRESET_LABELS) as Preset[]).map((k) => (
-                  <option key={k} value={k}>{PRESET_LABELS[k]}</option>
-                ))}
-              </select>
-            </label>
+                <div className="text-sm font-semibold">{p.label}</div>
+                <div className="text-xs mt-0.5 opacity-70">{p.desc}</div>
+              </button>
+            ))}
           </div>
+
+          {/* Instagram Reels button */}
+          <button
+            onClick={() => setDefaultReels((v) => !v)}
+            className={`
+              w-full flex items-center justify-between rounded-lg px-4 py-2.5 border transition-colors text-sm
+              ${defaultReels
+                ? 'border-pink-500 bg-pink-500/10 text-pink-300'
+                : 'border-gray-700 hover:border-gray-600 text-gray-400 hover:text-gray-300'
+              }
+            `}
+          >
+            <span>📱 Instagram Reels — 1080×1920, CRF 22</span>
+            {defaultReels && <span className="text-xs bg-pink-500/20 px-2 py-0.5 rounded-full">ON</span>}
+          </button>
         </div>
 
         {/* Drop zone */}
@@ -342,7 +406,7 @@ export default function VideoConverter() {
             border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors
             ${isDragging
               ? 'border-blue-500 bg-blue-500/5'
-              : 'border-gray-700 hover:border-blue-500 hover:bg-gray-800/50'
+              : 'border-gray-700 hover:border-blue-500 hover:bg-gray-800/40'
             }
           `}
         >
@@ -373,7 +437,12 @@ export default function VideoConverter() {
                 key={item.id}
                 item={item}
                 onRemove={removeItem}
-                onUpdate={updateItemSetting}
+                onUpdate={updateItem}
+                folders={folders}
+                selectedFolder={selectedFolder}
+                onFolderChange={setSelectedFolder}
+                onSave={handleSaveToGallery}
+                isAuthenticated={isAuthenticated}
               />
             ))}
           </div>
@@ -388,20 +457,28 @@ export default function VideoConverter() {
           >
             {isConverting
               ? 'Converting…'
-              : `Convert ${pendingCount} file${pendingCount > 1 ? 's' : ''} to MP4`
-            }
+              : `Convert ${pendingCount} file${pendingCount > 1 ? 's' : ''} to MP4`}
           </button>
         )}
 
-        {/* Empty state */}
         {queue.length === 0 && (
           <p className="text-center text-xs text-gray-600">
-            All conversion happens in your browser — no upload, no server, fully private.
+            All conversion happens in your browser — no upload, fully private.
           </p>
         )}
       </div>
     </div>
   );
+}
+
+// ─── FFmpeg Status Badge ──────────────────────────────────────────────────────
+
+function FFmpegStatusBadge({ status }: { status: 'loading' | 'ready' | 'error' }) {
+  if (status === 'loading')
+    return <span className="text-xs text-yellow-400 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse inline-block" />Loading FFmpeg…</span>;
+  if (status === 'ready')
+    return <span className="text-xs text-green-400 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />FFmpeg ready</span>;
+  return <span className="text-xs text-red-400">FFmpeg failed to load</span>;
 }
 
 // ─── Queue Card ───────────────────────────────────────────────────────────────
@@ -410,12 +487,17 @@ interface QueueCardProps {
   item: QueueItem;
   onRemove: (id: string) => void;
   onUpdate: <K extends keyof QueueItem>(id: string, key: K, value: QueueItem[K]) => void;
+  folders: string[];
+  selectedFolder: string;
+  onFolderChange: (f: string) => void;
+  onSave: (item: QueueItem) => void;
+  isAuthenticated: boolean;
 }
 
-function QueueCard({ item, onRemove, onUpdate }: QueueCardProps) {
+function QueueCard({ item, onRemove, onUpdate, folders, selectedFolder, onFolderChange, onSave, isAuthenticated }: QueueCardProps) {
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
-      {/* File info row */}
+      {/* File info */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-gray-200 truncate">{item.file.name}</p>
@@ -424,45 +506,58 @@ function QueueCard({ item, onRemove, onUpdate }: QueueCardProps) {
             {item.duration ? ` · ${formatDuration(item.duration)}` : ''}
           </p>
         </div>
-        <button
-          onClick={() => onRemove(item.id)}
-          className="text-gray-600 hover:text-red-400 transition-colors flex-shrink-0 mt-0.5"
-          title="Remove"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
+        {item.status !== 'converting' && (
+          <button
+            onClick={() => onRemove(item.id)}
+            className="text-gray-600 hover:text-red-400 transition-colors flex-shrink-0"
+            title="Remove"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        )}
       </div>
 
-      {/* Per-file settings (only when pending) */}
+      {/* Per-file preset selector (pending only) */}
       {item.status === 'pending' && (
-        <div className="grid grid-cols-3 gap-2">
-          <select
-            value={item.quality}
-            onChange={(e) => onUpdate(item.id, 'quality', e.target.value as Quality)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-blue-500"
+        <div className="space-y-2">
+          <div className="grid grid-cols-4 gap-1.5">
+            {QUALITY_PRESETS.map((p) => {
+              const est = estimateSize(item.duration, p.id, false);
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => { onUpdate(item.id, 'qualityPreset', p.id); onUpdate(item.id, 'isReels', false); }}
+                  className={`
+                    rounded-lg px-2 py-2 text-left transition-colors border text-xs
+                    ${item.qualityPreset === p.id && !item.isReels
+                      ? 'border-blue-500 bg-blue-500/10 text-blue-300'
+                      : 'border-gray-700 hover:border-gray-600 text-gray-400'
+                    }
+                  `}
+                >
+                  <div className="font-semibold">{p.label}</div>
+                  {est && <div className="opacity-60 mt-0.5">{est}</div>}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => onUpdate(item.id, 'isReels', !item.isReels)}
+            className={`
+              w-full text-left rounded-lg px-3 py-1.5 border transition-colors text-xs
+              ${item.isReels
+                ? 'border-pink-500 bg-pink-500/10 text-pink-300'
+                : 'border-gray-700 hover:border-gray-600 text-gray-500'
+              }
+            `}
           >
-            {(Object.keys(QUALITY_LABELS) as Quality[]).map((k) => (
-              <option key={k} value={k}>{QUALITY_LABELS[k]}</option>
-            ))}
-          </select>
-          <select
-            value={item.resolution}
-            onChange={(e) => onUpdate(item.id, 'resolution', e.target.value as Resolution)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-blue-500"
-          >
-            {(Object.keys(RESOLUTION_LABELS) as Resolution[]).map((k) => (
-              <option key={k} value={k}>{RESOLUTION_LABELS[k]}</option>
-            ))}
-          </select>
-          <select
-            value={item.preset}
-            onChange={(e) => onUpdate(item.id, 'preset', e.target.value as Preset)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-blue-500"
-          >
-            {(Object.keys(PRESET_LABELS) as Preset[]).map((k) => (
-              <option key={k} value={k}>{PRESET_LABELS[k]}</option>
-            ))}
-          </select>
+            📱 Instagram Reels 1080×1920
+            {item.isReels && (
+              <span className="ml-2 text-xs opacity-70">
+                {estimateSize(item.duration, '1080p', true) ?? ''}
+              </span>
+            )}
+          </button>
         </div>
       )}
 
@@ -475,7 +570,7 @@ function QueueCard({ item, onRemove, onUpdate }: QueueCardProps) {
           </div>
           <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
             <div
-              className="h-full bg-blue-600 rounded-full transition-all duration-300"
+              className="h-full bg-blue-600 rounded-full transition-all duration-200"
               style={{ width: `${item.progress}%` }}
             />
           </div>
@@ -484,23 +579,56 @@ function QueueCard({ item, onRemove, onUpdate }: QueueCardProps) {
 
       {/* Done */}
       {item.status === 'done' && item.outputUrl && (
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-green-400">
-            Done · {item.outputSize ? formatBytes(item.outputSize) : ''}
-          </span>
-          <a
-            href={item.outputUrl}
-            download={item.outputName}
-            className="text-xs bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded-lg transition-colors"
-          >
-            Download MP4
-          </a>
+        <div className="space-y-3 pt-1 border-t border-gray-800">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-green-400 font-medium">
+              ✅ {item.outputName} {item.outputSize ? `(${formatBytes(item.outputSize)})` : ''}
+            </span>
+            <a
+              href={item.outputUrl}
+              download={item.outputName}
+              className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download MP4
+            </a>
+          </div>
+
+          {/* Save to Gallery (only when authenticated) */}
+          {isAuthenticated && item.saveStatus !== 'saved' && (
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedFolder}
+                onChange={(e) => onFolderChange(e.target.value)}
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-blue-500 min-w-0"
+              >
+                <option value="">📁 All Files (root)</option>
+                {folders.map((f) => (
+                  <option key={f} value={f}>📁 {f}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => onSave(item)}
+                disabled={item.saveStatus === 'saving'}
+                className="flex-shrink-0 text-sm bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors whitespace-nowrap"
+              >
+                {item.saveStatus === 'saving' ? 'Saving…' : '📁 Save to Gallery'}
+              </button>
+            </div>
+          )}
+
+          {item.saveStatus === 'saved' && (
+            <p className="text-xs text-green-400">✅ Saved to gallery</p>
+          )}
+          {item.saveStatus === 'error' && (
+            <p className="text-xs text-red-400">{item.saveError}</p>
+          )}
         </div>
       )}
 
       {/* Error */}
       {item.status === 'error' && (
-        <p className="text-xs text-red-400">{item.error}</p>
+        <p className="text-xs text-red-400 bg-red-500/10 rounded-lg px-3 py-2">{item.error}</p>
       )}
     </div>
   );
