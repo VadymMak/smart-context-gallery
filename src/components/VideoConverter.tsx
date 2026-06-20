@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile } from '@ffmpeg/util';
+import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -167,15 +167,13 @@ export default function VideoConverter() {
       progressCb.current?.(pct, elapsed, eta);
     });
 
-    // Files served from /public/ffmpeg — same-origin, no CORP headers needed
+    // toBlobURL converts same-origin files to blob: URLs — bypasses COEP for WASM
     (async () => {
       console.log('[FFmpeg] Starting load...');
       try {
-        await instance.load({
-          coreURL: '/ffmpeg/ffmpeg-core.js',
-          wasmURL: '/ffmpeg/ffmpeg-core.wasm',
-          // workerURL omitted: @ffmpeg/core@0.12.6 UMD build has no worker file
-        });
+        const coreURL = await toBlobURL('/ffmpeg/ffmpeg-core.js', 'text/javascript');
+        const wasmURL = await toBlobURL('/ffmpeg/ffmpeg-core.wasm', 'application/wasm');
+        await instance.load({ coreURL, wasmURL });
         console.log('[FFmpeg] Loaded successfully');
         setFfmpegStatus('ready');
       } catch (err) {
