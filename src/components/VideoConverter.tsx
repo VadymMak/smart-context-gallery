@@ -139,6 +139,7 @@ export default function VideoConverter() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [ffmpegStatus, setFfmpegStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadError, setLoadError] = useState('');
   const [isConverting, setIsConverting] = useState(false);
 
   const [defaultPreset, setDefaultPreset] = useState<QualityPresetId>('1080p');
@@ -166,14 +167,21 @@ export default function VideoConverter() {
       progressCb.current?.(pct, elapsed, eta);
     });
 
-    const base = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-    Promise.all([
-      toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
-      toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
-    ])
-      .then(([coreURL, wasmURL]) => instance.load({ coreURL, wasmURL }))
-      .then(() => setFfmpegStatus('ready'))
-      .catch(() => setFfmpegStatus('error'));
+    const base = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
+    (async () => {
+      try {
+        const [coreURL, wasmURL] = await Promise.all([
+          toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
+          toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
+        ]);
+        await instance.load({ coreURL, wasmURL });
+        setFfmpegStatus('ready');
+      } catch (err) {
+        console.error('FFmpeg load failed:', err);
+        setLoadError('Failed to load FFmpeg. Please refresh the page.');
+        setFfmpegStatus('error');
+      }
+    })();
   }, []);
 
   // Load folders (also detects auth)
@@ -356,6 +364,20 @@ export default function VideoConverter() {
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+
+        {/* FFmpeg load error */}
+        {ffmpegStatus === 'error' && (
+          <div className="text-red-400 text-center py-10">
+            <p className="text-2xl mb-2">❌</p>
+            <p className="text-sm">{loadError || 'Failed to load FFmpeg.'}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-3 text-sm underline hover:text-red-300 transition-colors"
+            >
+              Refresh page
+            </button>
+          </div>
+        )}
 
         {/* Output Settings */}
         <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-4">
