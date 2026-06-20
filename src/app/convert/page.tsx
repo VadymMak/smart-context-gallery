@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import VideoConverter from '@/components/VideoConverter';
+import ConvertPageClient from './ConvertPageClient';
 
 export const metadata: Metadata = {
   title: 'Video Converter — AK Storage',
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function ConvertPage() {
-  return <VideoConverter />;
+  return <ConvertPageClient />;
 }

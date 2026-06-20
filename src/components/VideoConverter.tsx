@@ -124,30 +124,6 @@ function getFileDuration(file: File): Promise<number> {
   });
 }
 
-// ─── FFmpeg singleton ─────────────────────────────────────────────────────────
-
-const ffmpeg = new FFmpeg();
-let ffmpegLoaded = false;
-let ffmpegLoading = false;
-
-async function loadFFmpeg() {
-  if (ffmpegLoaded) return;
-  if (ffmpegLoading) {
-    await new Promise<void>((resolve) => {
-      const t = setInterval(() => { if (ffmpegLoaded) { clearInterval(t); resolve(); } }, 100);
-    });
-    return;
-  }
-  ffmpegLoading = true;
-  const base = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-  await ffmpeg.load({
-    coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
-  });
-  ffmpegLoaded = true;
-  ffmpegLoading = false;
-}
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function VideoConverter() {
@@ -164,15 +140,25 @@ export default function VideoConverter() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // Single global progress callback — avoids stacking listeners on ffmpeg
+  const ffmpegRef = useRef<FFmpeg | null>(null);
+  // Single progress callback ref — avoids stacking listeners on ffmpeg
   const progressCb = useRef<((p: number) => void) | null>(null);
 
-  // Load FFmpeg + set up single progress listener
+  // Create FFmpeg instance and load WASM (browser only — ssr: false guarantees this)
   useEffect(() => {
-    ffmpeg.on('progress', ({ progress }) => {
+    const instance = new FFmpeg();
+    ffmpegRef.current = instance;
+
+    instance.on('progress', ({ progress }) => {
       progressCb.current?.(Math.min(99, Math.round(progress * 100)));
     });
-    loadFFmpeg()
+
+    const base = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+    Promise.all([
+      toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
+      toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
+    ])
+      .then(([coreURL, wasmURL]) => instance.load({ coreURL, wasmURL }))
       .then(() => setFfmpegStatus('ready'))
       .catch(() => setFfmpegStatus('error'));
   }, []);
@@ -234,16 +220,17 @@ export default function VideoConverter() {
     progressCb.current = (p) =>
       setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, progress: p } : q));
 
+    const ff = ffmpegRef.current!;
     try {
-      await ffmpeg.writeFile(inputName, await fetchFile(item.file));
-      await ffmpeg.exec(buildFFmpegArgs(item, inputName, outputName));
+      await ff.writeFile(inputName, await fetchFile(item.file));
+      await ff.exec(buildFFmpegArgs(item, inputName, outputName));
 
-      const data = await ffmpeg.readFile(outputName);
+      const data = await ff.readFile(outputName);
       const blob = new Blob([data as unknown as BlobPart], { type: 'video/mp4' });
       const url = URL.createObjectURL(blob);
 
-      await ffmpeg.deleteFile(inputName);
-      await ffmpeg.deleteFile(outputName);
+      await ff.deleteFile(inputName);
+      await ff.deleteFile(outputName);
 
       setQueue((prev) => prev.map((q) =>
         q.id === item.id
