@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
+import { fetchFile } from '@ffmpeg/util';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -167,14 +167,13 @@ export default function VideoConverter() {
       progressCb.current?.(pct, elapsed, eta);
     });
 
-    const base = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
+    // Files served from /public/ffmpeg — same-origin, no CORP headers needed
     (async () => {
       try {
-        const [coreURL, wasmURL] = await Promise.all([
-          toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
-          toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
-        ]);
-        await instance.load({ coreURL, wasmURL });
+        await instance.load({
+          coreURL: '/ffmpeg/ffmpeg-core.js',
+          wasmURL: '/ffmpeg/ffmpeg-core.wasm',
+        });
         setFfmpegStatus('ready');
       } catch (err) {
         console.error('FFmpeg load failed:', err);
