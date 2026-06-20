@@ -169,9 +169,9 @@ select { font-family: inherit; }
 <script>
 // ─── FFmpeg globals from UMD ───────────────────────────────────────────────
 const { FFmpeg } = window.FFmpegWASM || {};
-const { fetchFile, toBlobURL } = window.FFmpegUtil || {};
+const { fetchFile } = window.FFmpegUtil || {};
 
-if (!FFmpeg || !fetchFile || !toBlobURL) {
+if (!FFmpeg || !fetchFile) {
   document.getElementById('error-text').textContent = 'Failed to load FFmpeg library from CDN. Check your connection.';
   document.getElementById('error-banner').style.display = '';
   document.getElementById('ffmpeg-badge').innerHTML = '<span style="color:#f87171">FFmpeg failed to load</span>';
@@ -253,9 +253,10 @@ async function initFFmpeg() {
   });
   console.log('[FFmpeg] Starting load...');
   try {
-    const coreURL = await toBlobURL('/ffmpeg/ffmpeg-core.js', 'text/javascript');
-    const wasmURL = await toBlobURL('/ffmpeg/ffmpeg-core.wasm', 'application/wasm');
-    await ffmpegInstance.load({ coreURL, wasmURL });
+    await ffmpegInstance.load({
+      coreURL: '/ffmpeg/ffmpeg-core.js',
+      wasmURL: '/ffmpeg/ffmpeg-core.wasm',
+    });
     ffmpegReady = true;
     console.log('[FFmpeg] Loaded successfully');
     setBadge('ready');
